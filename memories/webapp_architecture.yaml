@@ -1,0 +1,474 @@
+title: "Webアプリケーション アーキテクチャガイド"
+version: "1.0.0"
+last_updated: "2026-01-20"
+description: "Webアプリケーション開発のためのアーキテクチャ設計とベストプラクティス"
+
+sections:
+  - name: "プロジェクト構造"
+    content: |
+      ## 推奨ディレクトリ構造
+      
+      ```
+      app/
+      ├── (auth)/                 # 認証関連ページグループ
+      │   ├── login/
+      │   │   └── page.tsx
+      │   ├── register/
+      │   │   └── page.tsx
+      │   └── layout.tsx         # 認証ページ共通レイアウト
+      ├── (dashboard)/           # ダッシュボードページグループ
+      │   ├── dashboard/
+      │   │   └── page.tsx
+      │   ├── settings/
+      │   │   └── page.tsx
+      │   └── layout.tsx         # ダッシュボード共通レイアウト
+      ├── api/                   # API Routes
+      │   ├── auth/
+      │   │   └── [...nextauth]/
+      │   │       └── route.ts
+      │   ├── users/
+      │   │   ├── route.ts       # GET /api/users, POST /api/users
+      │   │   └── [id]/
+      │   │       └── route.ts   # GET /api/users/:id, PUT, DELETE
+      │   └── posts/
+      │       └── route.ts
+      ├── actions/               # Server Actions
+      │   ├── user.actions.ts
+      │   ├── post.actions.ts
+      │   └── auth.actions.ts
+      ├── components/            # 再利用可能なUIコンポーネント
+      │   ├── ui/               # shadcn/ui コンポーネント
+      │   ├── forms/            # フォームコンポーネント
+      │   ├── layouts/          # レイアウトコンポーネント
+      │   └── features/         # 機能別コンポーネント
+      ├── globals.css
+      ├── layout.tsx
+      └── page.tsx
+      
+      lib/
+      ├── db/                    # データベース関連
+      │   ├── prisma.ts         # Prismaクライアント
+      │   └── schema.prisma     # Prismaスキーマ
+      ├── auth/                  # 認証ロジック
+      │   ├── config.ts
+      │   └── session.ts
+      ├── validations/          # Zodスキーマ
+      │   ├── user.ts
+      │   └── post.ts
+      └── utils.ts
+      
+      hooks/                     # カスタムReact Hooks
+      ├── useAuth.ts
+      ├── useUser.ts
+      └── useDebounce.ts
+      
+      types/                     # TypeScript型定義
+      ├── user.ts
+      ├── post.ts
+      └── api.ts
+      ```
+
+  - name: "ルーティング戦略"
+    content: |
+      ## App Router パターン
+      
+      ### 1. ページルーティング
+      ```typescript
+      // app/blog/[slug]/page.tsx
+      export default function BlogPost({ params }: { params: { slug: string } }) {
+        return <div>Post: {params.slug}</div>;
+      }
+      ```
+      
+      ### 2. ルートグループ（レイアウト共有）
+      ```typescript
+      // app/(dashboard)/layout.tsx
+      export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+        return (
+          <div>
+            <Sidebar />
+            <main>{children}</main>
+          </div>
+        );
+      }
+      ```
+      
+      ### 3. 並列ルート（複数コンテンツ同時表示）
+      ```
+      app/
+      ├── @modal/
+      │   └── page.tsx
+      ├── @sidebar/
+      │   └── page.tsx
+      └── layout.tsx
+      ```
+      
+      ### 4. インターセプトルート（モーダル表示）
+      ```
+      app/
+      ├── photos/
+      │   └── [id]/
+      │       └── page.tsx
+      └── @modal/
+          └── (.)photos/
+              └── [id]/
+                  └── page.tsx
+      ```
+
+  - name: "データフェッチング"
+    content: |
+      ## Server Components でのデータ取得
+      
+      ### 1. 基本的なデータフェッチ
+      ```typescript
+      // app/posts/page.tsx
+      async function getPosts() {
+        const res = await fetch('https://api.example.com/posts', {
+          cache: 'no-store', // 常に最新データ
+        });
+        return res.json();
+      }
+      
+      export default async function PostsPage() {
+        const posts = await getPosts();
+        return <PostList posts={posts} />;
+      }
+      ```
+      
+      ### 2. キャッシュ戦略
+      ```typescript
+      // 静的データ（ビルド時に取得）
+      fetch(url, { cache: 'force-cache' });
+      
+      // 動的データ（リクエストごとに取得）
+      fetch(url, { cache: 'no-store' });
+      
+      // 再検証（60秒ごとに更新）
+      fetch(url, { next: { revalidate: 60 } });
+      ```
+      
+      ### 3. Parallel Data Fetching
+      ```typescript
+      async function getUser(id: string) {
+        const res = await fetch(`/api/users/${id}`);
+        return res.json();
+      }
+      
+      async function getPosts(userId: string) {
+        const res = await fetch(`/api/posts?userId=${userId}`);
+        return res.json();
+      }
+      
+      export default async function UserPage({ params }: { params: { id: string } }) {
+        // 並列実行
+        const [user, posts] = await Promise.all([
+          getUser(params.id),
+          getPosts(params.id),
+        ]);
+        
+        return (
+          <div>
+            <UserProfile user={user} />
+            <PostList posts={posts} />
+          </div>
+        );
+      }
+      ```
+      
+      ### 4. Streaming と Suspense
+      ```typescript
+      // app/dashboard/page.tsx
+      import { Suspense } from 'react';
+      
+      export default function Dashboard() {
+        return (
+          <div>
+            <h1>Dashboard</h1>
+            <Suspense fallback={<LoadingSkeleton />}>
+              <UserStats />
+            </Suspense>
+            <Suspense fallback={<LoadingSkeleton />}>
+              <RecentActivity />
+            </Suspense>
+          </div>
+        );
+      }
+      
+      async function UserStats() {
+        const stats = await fetchStats(); // 時間がかかる処理
+        return <StatsDisplay stats={stats} />;
+      }
+      ```
+
+  - name: "状態管理"
+    content: |
+      ## クライアント状態管理
+      
+      ### 1. Zustand（推奨）
+      ```typescript
+      // lib/store/useUserStore.ts
+      import { create } from 'zustand';
+      
+      interface UserState {
+        user: User | null;
+        setUser: (user: User) => void;
+        logout: () => void;
+      }
+      
+      export const useUserStore = create<UserState>((set) => ({
+        user: null,
+        setUser: (user) => set({ user }),
+        logout: () => set({ user: null }),
+      }));
+      
+      // 使用例
+      'use client';
+      
+      import { useUserStore } from '@/lib/store/useUserStore';
+      
+      export function UserProfile() {
+        const user = useUserStore((state) => state.user);
+        const logout = useUserStore((state) => state.logout);
+        
+        return (
+          <div>
+            <p>{user?.name}</p>
+            <button onClick={logout}>Logout</button>
+          </div>
+        );
+      }
+      ```
+      
+      ### 2. React Context（小規模な状態）
+      ```typescript
+      // app/providers/ThemeProvider.tsx
+      'use client';
+      
+      import { createContext, useContext, useState } from 'react';
+      
+      type Theme = 'light' | 'dark';
+      
+      const ThemeContext = createContext<{
+        theme: Theme;
+        toggleTheme: () => void;
+      } | undefined>(undefined);
+      
+      export function ThemeProvider({ children }: { children: React.ReactNode }) {
+        const [theme, setTheme] = useState<Theme>('light');
+        
+        const toggleTheme = () => {
+          setTheme(theme === 'light' ? 'dark' : 'light');
+        };
+        
+        return (
+          <ThemeContext.Provider value={{ theme, toggleTheme }}>
+            {children}
+          </ThemeContext.Provider>
+        );
+      }
+      
+      export function useTheme() {
+        const context = useContext(ThemeContext);
+        if (!context) throw new Error('useTheme must be used within ThemeProvider');
+        return context;
+      }
+      ```
+      
+      ### 3. React Query（サーバー状態管理）
+      ```typescript
+      // app/providers/QueryProvider.tsx
+      'use client';
+      
+      import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+      import { useState } from 'react';
+      
+      export function QueryProvider({ children }: { children: React.ReactNode }) {
+        const [queryClient] = useState(() => new QueryClient({
+          defaultOptions: {
+            queries: {
+              staleTime: 60 * 1000, // 1分
+            },
+          },
+        }));
+        
+        return (
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        );
+      }
+      
+      // hooks/useUsers.ts
+      import { useQuery } from '@tanstack/react-query';
+      
+      export function useUsers() {
+        return useQuery({
+          queryKey: ['users'],
+          queryFn: async () => {
+            const res = await fetch('/api/users');
+            return res.json();
+          },
+        });
+      }
+      ```
+
+  - name: "エラーハンドリング"
+    content: |
+      ## エラー処理パターン
+      
+      ### 1. Error Boundary
+      ```typescript
+      // app/error.tsx
+      'use client';
+      
+      export default function Error({
+        error,
+        reset,
+      }: {
+        error: Error & { digest?: string };
+        reset: () => void;
+      }) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <h2 className="text-2xl font-bold mb-4">エラーが発生しました</h2>
+            <p className="text-gray-600 mb-4">{error.message}</p>
+            <button
+              onClick={reset}
+              className="px-4 py-2 bg-blue-600 text-white rounded"
+            >
+              再試行
+            </button>
+          </div>
+        );
+      }
+      ```
+      
+      ### 2. Not Found ページ
+      ```typescript
+      // app/not-found.tsx
+      import Link from 'next/link';
+      
+      export default function NotFound() {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen">
+            <h2 className="text-4xl font-bold mb-4">404</h2>
+            <p className="text-gray-600 mb-4">ページが見つかりません</p>
+            <Link href="/" className="text-blue-600 hover:underline">
+              ホームに戻る
+            </Link>
+          </div>
+        );
+      }
+      ```
+      
+      ### 3. API エラーハンドリング
+      ```typescript
+      // lib/api/client.ts
+      export class ApiError extends Error {
+        constructor(
+          public status: number,
+          message: string,
+          public data?: any
+        ) {
+          super(message);
+          this.name = 'ApiError';
+        }
+      }
+      
+      export async function apiClient<T>(
+        url: string,
+        options?: RequestInit
+      ): Promise<T> {
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...options?.headers,
+          },
+        });
+        
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({}));
+          throw new ApiError(
+            res.status,
+            error.message || 'API request failed',
+            error
+          );
+        }
+        
+        return res.json();
+      }
+      ```
+
+  - name: "パフォーマンス最適化"
+    content: |
+      ## 最適化テクニック
+      
+      ### 1. 動的インポート
+      ```typescript
+      import dynamic from 'next/dynamic';
+      
+      const HeavyComponent = dynamic(() => import('@/components/HeavyComponent'), {
+        loading: () => <p>Loading...</p>,
+        ssr: false, // クライアントサイドのみ
+      });
+      ```
+      
+      ### 2. 画像最適化
+      ```typescript
+      import Image from 'next/image';
+      
+      export function UserAvatar({ src, alt }: { src: string; alt: string }) {
+        return (
+          <Image
+            src={src}
+            alt={alt}
+            width={100}
+            height={100}
+            className="rounded-full"
+            priority={false} // 遅延読み込み
+          />
+        );
+      }
+      ```
+      
+      ### 3. メモ化
+      ```typescript
+      'use client';
+      
+      import { useMemo, useCallback } from 'react';
+      
+      export function ExpensiveComponent({ data }: { data: number[] }) {
+        const sortedData = useMemo(() => {
+          return [...data].sort((a, b) => a - b);
+        }, [data]);
+        
+        const handleClick = useCallback(() => {
+          console.log('Clicked');
+        }, []);
+        
+        return <div onClick={handleClick}>{sortedData.join(', ')}</div>;
+      }
+      ```
+      
+      ### 4. Partial Prerendering（実験的機能）
+      ```typescript
+      // next.config.ts
+      const nextConfig = {
+        experimental: {
+          ppr: true, // Partial Prerendering
+        },
+      };
+      ```
+
+best_practices:
+  - "Server Components をデフォルトとし、必要な場合のみ Client Components を使用"
+  - "データフェッチはできるだけサーバーサイドで実行"
+  - "環境変数は NEXT_PUBLIC_ プレフィックスなしではクライアントに公開されない"
+  - "API Routes は /api ディレクトリに配置"
+  - "Server Actions はフォーム送信やデータ変更に使用"
+  - "キャッシュ戦略を適切に設定してパフォーマンスを最適化"
+  - "エラーハンドリングは error.tsx と not-found.tsx で統一"
+  - "型定義は types/ ディレクトリに集約"
+  - "再利用可能なロジックはカスタムフックに抽出"
+  - "コンポーネントは単一責任の原則に従って分割"

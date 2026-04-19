@@ -1,0 +1,533 @@
+title: "Vercel デプロイメントガイド"
+version: "2.0.0 (Next.js 16 + Firebase + Vercel)"
+last_updated: "2026-01-20"
+description: "VercelへのデプロイとFirebase統合の完全ガイド"
+
+sections:
+  - name: "Vercelプロジェクトセットアップ"
+    content: |
+      ## Vercelへのデプロイ準備
+      
+      ### 1. Vercel CLIのインストール
+      ```bash
+      npm install -g vercel
+      ```
+      
+      ### 2. Vercelにログイン
+      ```bash
+      vercel login
+      ```
+      
+      ### 3. プロジェクトのデプロイ
+      ```bash
+      # 初回デプロイ（開発環境）
+      vercel
+      
+      # 本番環境へのデプロイ
+      vercel --prod
+      ```
+      
+      ### 4. GitHubとの連携（推奨）
+      1. [Vercel Dashboard](https://vercel.com/dashboard) にアクセス
+      2. "Add New..." > "Project" をクリック
+      3. GitHubリポジトリをインポート
+      4. プロジェクト設定を確認
+      5. "Deploy" をクリック
+      
+      **メリット:**
+      - `main`ブランチへのプッシュで自動デプロイ
+      - プルリクエストごとにプレビュー環境が自動生成
+      - コミット履歴と連動したデプロイ履歴
+
+  - name: "環境変数の設定"
+    content: |
+      ## Vercelでの環境変数管理
+      
+      ### 1. Vercel Dashboardでの設定
+      ```bash
+      # 1. Vercel Dashboard > プロジェクト > Settings > Environment Variables
+      # 2. 以下の環境変数を追加
+      ```
+      
+      ### 2. Firebase Client SDK（全環境で必要）
+      ```bash
+      # Variable Name: NEXT_PUBLIC_FIREBASE_API_KEY
+      # Value: AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+      # Environment: Production, Preview, Development
+      
+      # Variable Name: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+      # Value: my-webapp.firebaseapp.com
+      # Environment: Production, Preview, Development
+      
+      # Variable Name: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+      # Value: my-webapp
+      # Environment: Production, Preview, Development
+      
+      # Variable Name: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      # Value: my-webapp.appspot.com
+      # Environment: Production, Preview, Development
+      
+      # Variable Name: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+      # Value: 123456789012
+      # Environment: Production, Preview, Development
+      
+      # Variable Name: NEXT_PUBLIC_FIREBASE_APP_ID
+      # Value: 1:123456789012:web:abcdef123456
+      # Environment: Production, Preview, Development
+      ```
+      
+      ### 3. Firebase Admin SDK（本番環境のみ）
+      ```bash
+      # Variable Name: FIREBASE_PROJECT_ID
+      # Value: my-webapp
+      # Environment: Production
+      
+      # Variable Name: FIREBASE_CLIENT_EMAIL
+      # Value: firebase-adminsdk-xxxxx@my-webapp.iam.gserviceaccount.com
+      # Environment: Production
+      
+      # Variable Name: FIREBASE_PRIVATE_KEY
+      # Value: -----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n
+      # Environment: Production
+      # ⚠️ 注意: 改行は\nのまま入力（実際の改行にしない）
+      ```
+      
+      ### 4. Vercel CLIでの環境変数設定
+      ```bash
+      # 本番環境
+      vercel env add FIREBASE_PROJECT_ID production
+      vercel env add FIREBASE_CLIENT_EMAIL production
+      vercel env add FIREBASE_PRIVATE_KEY production
+      
+      # プレビュー環境
+      vercel env add FIREBASE_PROJECT_ID preview
+      
+      # 開発環境
+      vercel env add FIREBASE_PROJECT_ID development
+      
+      # 環境変数の確認
+      vercel env ls
+      
+      # 環境変数の削除
+      vercel env rm VARIABLE_NAME production
+      ```
+      
+      ### 5. .env.exampleの作成
+      ```bash
+      # .env.example
+      # Firebase Client SDK
+      NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+      NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+      
+      # Firebase Admin SDK
+      FIREBASE_PROJECT_ID=your-project-id
+      FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+      FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+      ```
+
+  - name: "ビルド設定"
+    content: |
+      ## Next.js 16のビルド最適化
+      
+      ### 1. next.config.tsの設定
+      ```typescript
+      // next.config.ts
+      import type { NextConfig } from 'next';
+      
+      const nextConfig: NextConfig = {
+        // 画像最適化
+        images: {
+          formats: ['image/avif', 'image/webp'],
+          deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+          imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+          // Firebase Storageの画像を使用する場合
+          remotePatterns: [
+            {
+              protocol: 'https',
+              hostname: 'firebasestorage.googleapis.com',
+              pathname: '/v0/b/**',
+            },
+          ],
+        },
+        
+        // 圧縮
+        compress: true,
+        
+        // 厳格モード
+        reactStrictMode: true,
+        
+        // Turbopack（デフォルトで有効）
+        // Next.js 16ではTurbopackがデフォルトビルドツール
+        
+        // React Compiler（デフォルトで有効）
+        // useMemo, useCallback, React.memoの自動最適化
+        
+        // 環境変数の検証（オプション）
+        env: {
+          NEXT_PUBLIC_APP_NAME: 'My Web App',
+        },
+      };
+      
+      export default nextConfig;
+      ```
+      
+      ### 2. vercel.jsonの設定（オプション）
+      ```json
+      {
+        "buildCommand": "npm run build",
+        "devCommand": "npm run dev",
+        "installCommand": "npm install",
+        "framework": "nextjs",
+        "regions": ["nrt1"],
+        "headers": [
+          {
+            "source": "/(.*)",
+            "headers": [
+              {
+                "key": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "key": "X-Frame-Options",
+                "value": "DENY"
+              },
+              {
+                "key": "X-XSS-Protection",
+                "value": "1; mode=block"
+              }
+            ]
+          }
+        ]
+      }
+      ```
+      
+      ### 3. package.jsonのスクリプト
+      ```json
+      {
+        "scripts": {
+          "dev": "next dev --turbopack",
+          "build": "next build",
+          "start": "next start",
+          "lint": "next lint",
+          "vercel-build": "next build"
+        }
+      }
+      ```
+
+  - name: "デプロイフロー"
+    content: |
+      ## 自動デプロイの設定
+      
+      ### 1. GitHub連携による自動デプロイ
+      ```bash
+      # 1. GitHubリポジトリをVercelにインポート
+      # 2. 以下のブランチ戦略を設定
+      
+      main ブランチ → 本番環境（Production）
+      develop ブランチ → ステージング環境（Preview）
+      feature/* ブランチ → プレビュー環境（Preview）
+      ```
+      
+      ### 2. デプロイワークフロー
+      ```bash
+      # 開発フロー
+      git checkout -b feature/new-feature
+      # コード変更
+      git add .
+      git commit -m "Add new feature"
+      git push origin feature/new-feature
+      
+      # → Vercelが自動的にプレビュー環境をデプロイ
+      # → プルリクエストにプレビューURLが表示される
+      
+      # レビュー後、mainにマージ
+      git checkout main
+      git merge feature/new-feature
+      git push origin main
+      
+      # → Vercelが自動的に本番環境にデプロイ
+      ```
+      
+      ### 3. デプロイフック（Webhook）
+      ```bash
+      # Vercel Dashboard > Settings > Git > Deploy Hooks
+      # 1. "Create Hook" をクリック
+      # 2. Hook名とブランチを設定
+      # 3. URLをコピー
+      
+      # 外部サービスからデプロイをトリガー
+      curl -X POST https://api.vercel.com/v1/integrations/deploy/xxx/yyy
+      ```
+      
+      ### 4. GitHub Actionsとの連携
+      ```yaml
+      # .github/workflows/deploy.yml
+      name: Deploy to Vercel
+      
+      on:
+        push:
+          branches:
+            - main
+      
+      jobs:
+        deploy:
+          runs-on: ubuntu-latest
+          
+          steps:
+            - uses: actions/checkout@v3
+            
+            - name: Setup Node.js
+              uses: actions/setup-node@v3
+              with:
+                node-version: '20'
+                cache: 'npm'
+            
+            - name: Install dependencies
+              run: npm ci
+            
+            - name: Run tests
+              run: npm test
+            
+            - name: Deploy to Vercel
+              uses: amondnet/vercel-action@v25
+              with:
+                vercel-token: ${{ secrets.VERCEL_TOKEN }}
+                vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+                vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+                vercel-args: '--prod'
+      ```
+
+  - name: "パフォーマンス最適化"
+    content: |
+      ## Vercel + Next.js 16の最適化
+      
+      ### 1. Edge Runtime（オプション）
+      ```typescript
+      // app/api/hello/route.ts
+      export const runtime = 'edge'; // Edge Runtimeで実行
+      
+      export async function GET() {
+        return Response.json({ message: 'Hello from Edge!' });
+      }
+      ```
+      
+      **注意:** Firebase Admin SDKはEdge Runtimeで動作しないため、
+      Admin SDKを使用するAPI RouteやServer ActionsではNode.js Runtimeを使用。
+      
+      ### 2. ISR（Incremental Static Regeneration）
+      ```typescript
+      // app/blog/[slug]/page.tsx
+      export const revalidate = 3600; // 1時間ごとに再生成
+      
+      export default async function BlogPost({ params }: { params: { slug: string } }) {
+        const post = await getPost(params.slug);
+        return <article>{post.content}</article>;
+      }
+      ```
+      
+      ### 3. 画像最適化
+      ```typescript
+      // app/components/UserAvatar.tsx
+      import Image from 'next/image';
+      
+      export function UserAvatar({ src }: { src: string }) {
+        return (
+          <Image
+            src={src} // Firebase Storageのurl
+            alt="Avatar"
+            width={100}
+            height={100}
+            priority={false}
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+          />
+        );
+      }
+      ```
+      
+      ### 4. バンドルサイズの最適化
+      ```bash
+      # バンドルアナライザーのインストール
+      npm install -D @next/bundle-analyzer
+      ```
+      
+      ```typescript
+      // next.config.ts
+      import withBundleAnalyzer from '@next/bundle-analyzer';
+      
+      const bundleAnalyzer = withBundleAnalyzer({
+        enabled: process.env.ANALYZE === 'true',
+      });
+      
+      export default bundleAnalyzer(nextConfig);
+      ```
+      
+      ```bash
+      # バンドルサイズの分析
+      ANALYZE=true npm run build
+      ```
+      
+      ### 5. キャッシュ戦略
+      ```typescript
+      // app/api/data/route.ts
+      export async function GET() {
+        const data = await fetchData();
+        
+        return Response.json(data, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+          },
+        });
+      }
+      ```
+
+  - name: "モニタリングとデバッグ"
+    content: |
+      ## Vercelでの監視とトラブルシューティング
+      
+      ### 1. Vercel Analytics
+      ```bash
+      # Vercel Analyticsのインストール
+      npm install @vercel/analytics
+      ```
+      
+      ```typescript
+      // app/layout.tsx
+      import { Analytics } from '@vercel/analytics/react';
+      
+      export default function RootLayout({ children }: { children: React.ReactNode }) {
+        return (
+          <html lang="ja">
+            <body>
+              {children}
+              <Analytics />
+            </body>
+          </html>
+        );
+      }
+      ```
+      
+      ### 2. Vercel Speed Insights
+      ```bash
+      npm install @vercel/speed-insights
+      ```
+      
+      ```typescript
+      // app/layout.tsx
+      import { SpeedInsights } from '@vercel/speed-insights/next';
+      
+      export default function RootLayout({ children }: { children: React.ReactNode }) {
+        return (
+          <html lang="ja">
+            <body>
+              {children}
+              <SpeedInsights />
+            </body>
+          </html>
+        );
+      }
+      ```
+      
+      ### 3. ログの確認
+      ```bash
+      # Vercel Dashboard > プロジェクト > Deployments > デプロイを選択 > Logs
+      
+      # またはCLIでログを確認
+      vercel logs <deployment-url>
+      
+      # リアルタイムログ
+      vercel logs --follow
+      ```
+      
+      ### 4. デバッグモード
+      ```bash
+      # ローカルでVercel環境を再現
+      vercel dev
+      
+      # 環境変数を含めて実行
+      vercel dev --env-file=.env.local
+      ```
+      
+      ### 5. エラー追跡（Sentry連携）
+      ```bash
+      npm install @sentry/nextjs
+      npx @sentry/wizard@latest -i nextjs
+      ```
+      
+      ```typescript
+      // sentry.client.config.ts
+      import * as Sentry from '@sentry/nextjs';
+      
+      Sentry.init({
+        dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+        tracesSampleRate: 1.0,
+        environment: process.env.VERCEL_ENV || 'development',
+      });
+      ```
+
+  - name: "カスタムドメインの設定"
+    content: |
+      ## 独自ドメインの接続
+      
+      ### 1. Vercel Dashboardでの設定
+      ```bash
+      # 1. Vercel Dashboard > プロジェクト > Settings > Domains
+      # 2. "Add" をクリック
+      # 3. ドメイン名を入力（例: example.com）
+      # 4. DNSレコードを設定
+      ```
+      
+      ### 2. DNSレコードの設定
+      ```bash
+      # Aレコード（ルートドメイン）
+      Type: A
+      Name: @
+      Value: 76.76.21.21
+      
+      # CNAMEレコード（wwwサブドメイン）
+      Type: CNAME
+      Name: www
+      Value: cname.vercel-dns.com
+      ```
+      
+      ### 3. SSL証明書
+      ```bash
+      # Vercelが自動的にLet's Encrypt証明書を発行
+      # 設定後、数分でHTTPSが有効化される
+      ```
+      
+      ### 4. リダイレクト設定
+      ```json
+      // vercel.json
+      {
+        "redirects": [
+          {
+            "source": "/:path*",
+            "has": [
+              {
+                "type": "host",
+                "value": "www.example.com"
+              }
+            ],
+            "destination": "https://example.com/:path*",
+            "permanent": true
+          }
+        ]
+      }
+      ```
+
+best_practices:
+  - "環境変数は必ずVercel Dashboardで設定（.env.localはGitにコミットしない）"
+  - "Firebase Admin SDKの秘密鍵は本番環境のみに設定"
+  - "GitHubと連携して自動デプロイを有効化"
+  - "プレビュー環境で必ずテストしてから本番デプロイ"
+  - "Vercel Analyticsで実際のユーザー体験を監視"
+  - "バンドルサイズを定期的にチェックして最適化"
+  - "Edge Runtimeは適切な場所で使用（Firebase Admin SDKとは併用不可）"
+  - "ISRを活用して静的生成とリアルタイム性を両立"
+  - "カスタムドメインは必ずHTTPSで運用"
+  - "Sentryなどのエラー追跡ツールを導入して本番環境の問題を早期発見"

@@ -1,0 +1,32 @@
+/* ============================================================================
+   globals.css - v3.2.0 対応版（2025-10-29）
+   ============================================================================ */
+
+/* 🆕 v3.2.0: CSS変数を @import より前に配置（CRITICAL） */
+/* setup-fonts.js が自動的にこのセクションを更新します */
+:root {
+  --font-display: "Noto Sans JP", sans-serif;
+  --font-body: "Noto Sans JP", sans-serif;
+}
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* 🚨 重要: フォントCSSはここにインポートしない */
+/* layout.tsx でインポートすることで全ページに適用される */
+
+@theme {
+  /* フォントファミリーの定義 */
+  --font-family-display: var(--font-display);
+  --font-family-body: var(--font-body);
+  --font-family-sans: var(--font-body);
+}
+
+/* 🆕 v3.2.0: 見出しに表示用フォントを直接適用 */
+/* setup-font-project.js が自動的に追加します */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* ⚠️ v3.2.0: @utility は使用しません（Tailwind CSS v4 互換性問題を回避） */
+/* 代わりに @theme と見出しタグへの直接適用を使用します */

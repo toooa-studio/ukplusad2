@@ -1,0 +1,264 @@
+# Google Fonts ローカル自動化 - フォント定義ファイル（複数選択対応版）
+# 見出しと本文を個別に選択できるようになりました
+
+meta:
+  name: "vibe-fonts"
+  version: "2.0"
+  notes:
+    - "見出しと本文を個別に選択可能"
+    - "固定ウェイト指定で安定取得"
+    - "まず .woff2 を抽出。無ければ .ttf にフォールバック"
+    - "UA/Referer を付与（fonts.googleapis.com向け）"
+
+defaults:
+  vibe: kawaii
+  variables:
+    display: "--font-display"
+    body: "--font-body"
+  http:
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    accept: "text/css,*/*;q=0.1"
+    referer: "https://fonts.googleapis.com/"
+  outputs:
+    activeCss: "lib/fonts/_active.css"
+    varsCss: "lib/fonts/_vars.css"
+
+# 雰囲気ごとのフォント選択肢
+presets:
+  
+  # 1) かわいい
+  kawaii:
+    fonts:
+      display:
+        zen-maru:
+          name: "Zen Maru Gothic（丸ゴシック）"
+          family: "Zen Maru Gothic"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/kawaii/zen-maru-gothic"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/kawaii/zen-kaku-gothic-new"
+      body:
+        zen-maru:
+          name: "Zen Maru Gothic（丸ゴシック）"
+          family: "Zen Maru Gothic"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-maru-gothic"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-kaku-gothic-new"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 2) ポップ
+  pop:
+    fonts:
+      display:
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap"
+          destDir: "lib/fonts/pop/zen-kaku-gothic-new"
+      body:
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-kaku-gothic-new"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 3) やさしい・ナチュラル
+  natural:
+    fonts:
+      display:
+        noto-sans:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/natural/noto-sans-jp"
+        zen-maru:
+          name: "Zen Maru Gothic（丸ゴシック）"
+          family: "Zen Maru Gothic"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/natural/zen-maru-gothic"
+      body:
+        noto-sans-var:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/natural/noto-sans-jp"
+        zen-maru:
+          name: "Zen Maru Gothic（丸ゴシック）"
+          family: "Zen Maru Gothic"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-maru-gothic"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 4) 上品・高級感
+  elegant:
+    fonts:
+      display:
+        cormorant:
+          name: "Cormorant Garamond（セリフ体）"
+          family: "Cormorant Garamond"
+          css: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/elegant/cormorant-garamond"
+        noto-serif:
+          name: "Noto Serif JP（明朝体）"
+          family: "Noto Serif JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/elegant/noto-serif-jp"
+        noto-sans:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/elegant/noto-sans-jp"
+        cardo:
+          name: "Cardo（クラシック）"
+          family: "Cardo"
+          css: "https://fonts.googleapis.com/css2?family=Cardo:wght@400;700&display=swap"
+          destDir: "lib/fonts/elegant/cardo"
+      body:
+        cormorant:
+          name: "Cormorant Garamond（セリフ体）"
+          family: "Cormorant Garamond"
+          css: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/elegant/cormorant-garamond"
+        noto-serif:
+          name: "Noto Serif JP（明朝体）"
+          family: "Noto Serif JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-serif-jp"
+        noto-sans-body:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+        cardo:
+          name: "Cardo（クラシック）"
+          family: "Cardo"
+          css: "https://fonts.googleapis.com/css2?family=Cardo:wght@400;700&display=swap"
+          destDir: "lib/fonts/elegant/cardo"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 5) かっこいい
+  cool:
+    fonts:
+      display:
+        poppins:
+          name: "Poppins（モダン）"
+          family: "Poppins"
+          css: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/cool/poppins"
+        noto-sans:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/cool/noto-sans-jp"
+      body:
+        poppins:
+          name: "Poppins（モダン）"
+          family: "Poppins"
+          css: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/cool/poppins"
+        noto-sans-body:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 6) シンプル
+  simple:
+    fonts:
+      display:
+        inter:
+          name: "Inter（モダン）"
+          family: "Inter"
+          css: "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/simple/inter"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/simple/zen-kaku-gothic-new"
+        noto-sans:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/simple/noto-sans-jp"
+      body:
+        inter:
+          name: "Inter（モダン）"
+          family: "Inter"
+          css: "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+          destDir: "lib/fonts/simple/inter"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-kaku-gothic-new"
+        noto-sans-body:
+          name: "Noto Sans JP（ゴシック）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"
+
+  # 7) 和風
+  wa:
+    fonts:
+      display:
+        shippori-mincho:
+          name: "Shippori Mincho（明朝体）"
+          family: "Shippori Mincho"
+          css: "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&display=swap"
+          destDir: "lib/fonts/wa/shippori-mincho"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/wa/zen-kaku-gothic-new"
+      body:
+        shippori-mincho:
+          name: "Shippori Mincho（明朝体）"
+          family: "Shippori Mincho"
+          css: "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&display=swap"
+          destDir: "lib/fonts/wa/shippori-mincho"
+        zen-kaku:
+          name: "Zen Kaku Gothic New（ゴシック）"
+          family: "Zen Kaku Gothic New"
+          css: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/zen-kaku-gothic-new"
+        noto-sans:
+          name: "Noto Sans JP（デフォルト）"
+          family: "Noto Sans JP"
+          css: "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+          destDir: "lib/fonts/common/noto-sans-jp"

@@ -1,0 +1,451 @@
+title: "Next.js 16 新機能ガイド"
+version: "1.0.0"
+last_updated: "2026-01-20"
+description: "Next.js 16の新機能と変更点の完全ガイド"
+
+sections:
+  - name: "React Compiler（自動最適化）"
+    content: |
+      ## React Compilerの導入
+      
+      Next.js 16では、React Compilerがデフォルトで有効化されています。
+      これにより、手動での最適化が不要になりました。
+      
+      ### 1. 不要になった手動最適化
+      ```typescript
+      // ❌ Next.js 15以前（手動最適化が必要）
+      import { useMemo, useCallback, memo } from 'react';
+      
+      const ExpensiveComponent = memo(({ data }: { data: number[] }) => {
+        const sortedData = useMemo(() => {
+          return [...data].sort((a, b) => a - b);
+        }, [data]);
+        
+        const handleClick = useCallback(() => {
+          console.log('Clicked');
+        }, []);
+        
+        return <div onClick={handleClick}>{sortedData.join(', ')}</div>;
+      });
+      
+      // ✅ Next.js 16（自動最適化）
+      function ExpensiveComponent({ data }: { data: number[] }) {
+        const sortedData = [...data].sort((a, b) => a - b);
+        
+        const handleClick = () => {
+          console.log('Clicked');
+        };
+        
+        return <div onClick={handleClick}>{sortedData.join(', ')}</div>;
+      }
+      ```
+      
+      ### 2. React Compilerが自動で行うこと
+      - 不要な再レンダリングの防止
+      - 高コストな計算のメモ化
+      - コールバック関数の最適化
+      - コンポーネントの自動メモ化
+      
+      ### 3. 手動最適化が必要なケース
+      ```typescript
+      // React Compilerでも最適化できない場合のみ手動で実装
+      
+      // 1. 外部ライブラリとの統合
+      const memoizedValue = useMemo(() => {
+        return expensiveLibraryFunction(data);
+      }, [data]);
+      
+      // 2. useEffectの依存配列
+      useEffect(() => {
+        // React Compilerは依存配列を自動最適化しない
+      }, [dependency]);
+      
+      // 3. カスタムフックの戻り値
+      function useCustomHook() {
+        // 戻り値が毎回新しいオブジェクトになる場合はメモ化が必要
+        return useMemo(() => ({ value: 'test' }), []);
+      }
+      ```
+
+  - name: "Turbopack（デフォルトビルドツール）"
+    content: |
+      ## Turbopackの完全統合
+      
+      Next.js 16では、TurbopackがWebpackに代わるデフォルトのビルドツールになりました。
+      
+      ### 1. パフォーマンス向上
+      ```bash
+      # 開発サーバー起動時間
+      Webpack: 約10秒
+      Turbopack: 約1秒（10倍高速）
+      
+      # HMR（Hot Module Replacement）
+      Webpack: 約500ms
+      Turbopack: 約50ms（10倍高速）
+      
+      # 本番ビルド時間
+      Webpack: 約60秒
+      Turbopack: 約20秒（3倍高速）
+      ```
+      
+      ### 2. 設定不要
+      ```typescript
+      // next.config.ts
+      // Turbopackはデフォルトで有効（設定不要）
+      
+      const nextConfig: NextConfig = {
+        // Turbopack関連の設定は不要
+      };
+      
+      export default nextConfig;
+      ```
+      
+      ### 3. package.jsonのスクリプト
+      ```json
+      {
+        "scripts": {
+          "dev": "next dev",
+          "build": "next build",
+          "start": "next start"
+        }
+      }
+      ```
+      
+      ### 4. Webpackへの切り替え（非推奨）
+      ```bash
+      # 特別な理由がある場合のみWebpackを使用
+      NEXT_WEBPACK=true npm run dev
+      ```
+
+  - name: "Server Actions（安定版）"
+    content: |
+      ## Server Actionsの完全サポート
+      
+      Next.js 16では、Server Actionsが安定版として正式にサポートされました。
+      
+      ### 1. 基本的な使い方
+      ```typescript
+      // app/actions/todo.actions.ts
+      'use server';
+      
+      import { revalidatePath } from 'next/cache';
+      
+      export async function createTodo(formData: FormData) {
+        const title = formData.get('title') as string;
+        
+        // データベース操作（Firebase Admin SDK）
+        await adminDb.collection('todos').add({
+          title,
+          completed: false,
+          createdAt: new Date(),
+        });
+        
+        // キャッシュの再検証
+        revalidatePath('/todos');
+        
+        return { success: true };
+      }
+      ```
+      
+      ### 2. フォームでの使用
+      ```typescript
+      // app/components/TodoForm.tsx
+      import { createTodo } from '@/app/actions/todo.actions';
+      
+      export function TodoForm() {
+        return (
+          <form action={createTodo}>
+            <input name="title" required />
+            <button type="submit">追加</button>
+          </form>
+        );
+      }
+      ```
+      
+      ### 3. useFormStateでの使用
+      ```typescript
+      'use client';
+      
+      import { useFormState, useFormStatus } from 'react-dom';
+      import { createTodo } from '@/app/actions/todo.actions';
+      
+      function SubmitButton() {
+        const { pending } = useFormStatus();
+        return (
+          <button type="submit" disabled={pending}>
+            {pending ? '追加中...' : '追加'}
+          </button>
+        );
+      }
+      
+      export function TodoForm() {
+        const [state, formAction] = useFormState(createTodo, null);
+        
+        return (
+          <form action={formAction}>
+            <input name="title" required />
+            {state?.error && <p className="text-red-500">{state.error}</p>}
+            <SubmitButton />
+          </form>
+        );
+      }
+      ```
+      
+      ### 4. プログラムからの呼び出し
+      ```typescript
+      'use client';
+      
+      import { createTodo } from '@/app/actions/todo.actions';
+      
+      export function AddTodoButton() {
+        const handleClick = async () => {
+          const formData = new FormData();
+          formData.append('title', 'New Todo');
+          
+          const result = await createTodo(formData);
+          
+          if (result.success) {
+            alert('追加しました！');
+          }
+        };
+        
+        return <button onClick={handleClick}>クイック追加</button>;
+      }
+      ```
+
+  - name: "Partial Prerendering（PPR）"
+    content: |
+      ## 部分的プリレンダリング
+      
+      Next.js 16では、Partial Prerendering（PPR）が実験的機能として利用可能です。
+      
+      ### 1. PPRとは
+      - ページの静的部分を事前レンダリング
+      - 動的部分はストリーミングで配信
+      - 初期表示が高速化
+      
+      ### 2. 有効化
+      ```typescript
+      // next.config.ts
+      const nextConfig: NextConfig = {
+        experimental: {
+          ppr: true,
+        },
+      };
+      
+      export default nextConfig;
+      ```
+      
+      ### 3. 使用例
+      ```typescript
+      // app/dashboard/page.tsx
+      import { Suspense } from 'react';
+      
+      // 静的部分
+      export default function DashboardPage() {
+        return (
+          <div>
+            <h1>ダッシュボード</h1>
+            
+            {/* 動的部分はSuspenseでラップ */}
+            <Suspense fallback={<LoadingSkeleton />}>
+              <UserStats />
+            </Suspense>
+            
+            <Suspense fallback={<LoadingSkeleton />}>
+              <RecentActivity />
+            </Suspense>
+          </div>
+        );
+      }
+      
+      // 動的コンポーネント
+      async function UserStats() {
+        const stats = await fetchUserStats(); // 時間がかかる処理
+        return <div>{/* stats表示 */}</div>;
+      }
+      ```
+
+  - name: "Caching（キャッシュ戦略の改善）"
+    content: |
+      ## 新しいキャッシュAPI
+      
+      Next.js 16では、キャッシュ制御がより柔軟になりました。
+      
+      ### 1. fetch APIのキャッシュ
+      ```typescript
+      // デフォルト: キャッシュあり
+      const data = await fetch('https://api.example.com/data');
+      
+      // キャッシュなし
+      const data = await fetch('https://api.example.com/data', {
+        cache: 'no-store',
+      });
+      
+      // 60秒ごとに再検証
+      const data = await fetch('https://api.example.com/data', {
+        next: { revalidate: 60 },
+      });
+      
+      // タグベースの再検証
+      const data = await fetch('https://api.example.com/data', {
+        next: { tags: ['todos'] },
+      });
+      ```
+      
+      ### 2. unstable_cacheの使用
+      ```typescript
+      import { unstable_cache } from 'next/cache';
+      
+      const getCachedData = unstable_cache(
+        async (id: string) => {
+          return await fetchData(id);
+        },
+        ['data-cache'],
+        {
+          revalidate: 3600, // 1時間
+          tags: ['data'],
+        }
+      );
+      
+      export async function DataComponent({ id }: { id: string }) {
+        const data = await getCachedData(id);
+        return <div>{data}</div>;
+      }
+      ```
+      
+      ### 3. revalidateTag / revalidatePath
+      ```typescript
+      // app/actions/data.actions.ts
+      'use server';
+      
+      import { revalidateTag, revalidatePath } from 'next/cache';
+      
+      export async function updateData(id: string) {
+        await updateDatabase(id);
+        
+        // タグで再検証
+        revalidateTag('data');
+        
+        // パスで再検証
+        revalidatePath('/dashboard');
+      }
+      ```
+
+  - name: "TypeScript 5.6+ サポート"
+    content: |
+      ## TypeScriptの新機能
+      
+      Next.js 16は、TypeScript 5.6以降の新機能をフルサポートしています。
+      
+      ### 1. 型推論の改善
+      ```typescript
+      // Server Actionsの型推論が改善
+      'use server';
+      
+      export async function createUser(formData: FormData) {
+        const name = formData.get('name'); // string | null と推論
+        
+        // 型ガードが不要に
+        if (name) {
+          // nameはstringと推論される
+          console.log(name.toUpperCase());
+        }
+      }
+      ```
+      
+      ### 2. Async/Await の型安全性
+      ```typescript
+      // Server Componentの型推論
+      export default async function Page() {
+        const data = await fetchData(); // 型が自動推論
+        return <div>{data.title}</div>;
+      }
+      ```
+      
+      ### 3. 厳格な型チェック
+      ```json
+      // tsconfig.json
+      {
+        "compilerOptions": {
+          "strict": true,
+          "noUncheckedIndexedAccess": true,
+          "exactOptionalPropertyTypes": true
+        }
+      }
+      ```
+
+  - name: "その他の改善点"
+    content: |
+      ## Next.js 16のその他の新機能
+      
+      ### 1. 改善されたエラーメッセージ
+      ```bash
+      # より詳細で分かりやすいエラーメッセージ
+      Error: Cannot use "use client" directive in Server Component
+      
+      → app/components/Button.tsx:1:1
+      
+      Suggestion: Move this component to a separate file with "use client" at the top
+      ```
+      
+      ### 2. 開発者ツールの改善
+      ```bash
+      # より詳細なビルド情報
+      ✓ Compiled /dashboard in 123ms
+      ✓ Compiled /api/users in 45ms
+      
+      Route (app)                              Size     First Load JS
+      ┌ ○ /                                    1.2 kB         85.3 kB
+      ├ ○ /dashboard                           2.5 kB         87.6 kB
+      └ ○ /api/users                           500 B          82.1 kB
+      ```
+      
+      ### 3. セキュリティの強化
+      ```typescript
+      // CSP（Content Security Policy）の自動設定
+      // next.config.ts
+      const nextConfig: NextConfig = {
+        headers: async () => [
+          {
+            source: '/:path*',
+            headers: [
+              {
+                key: 'Content-Security-Policy',
+                value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline';",
+              },
+            ],
+          },
+        ],
+      };
+      ```
+      
+      ### 4. パフォーマンスメトリクスの改善
+      ```typescript
+      // Web Vitalsの自動計測
+      // app/layout.tsx
+      import { SpeedInsights } from '@vercel/speed-insights/next';
+      
+      export default function RootLayout({ children }: { children: React.ReactNode }) {
+        return (
+          <html>
+            <body>
+              {children}
+              <SpeedInsights />
+            </body>
+          </html>
+        );
+      }
+      ```
+
+best_practices:
+  - "React Compilerを信頼し、手動最適化は最小限に"
+  - "Turbopackの高速ビルドを活用して開発効率を向上"
+  - "Server Actionsでフォーム送信とデータ変更を簡潔に実装"
+  - "PPRで初期表示を高速化（実験的機能）"
+  - "キャッシュ戦略を適切に設定してパフォーマンスを最適化"
+  - "TypeScriptの厳格モードを有効化して型安全性を確保"
+  - "Vercel Speed Insightsでパフォーマンスを継続的に監視"
+  - "エラーメッセージを活用して問題を素早く解決"
+  - "セキュリティヘッダーを設定してアプリを保護"
+  - "Next.js 16の新機能を積極的に活用して開発体験を向上"

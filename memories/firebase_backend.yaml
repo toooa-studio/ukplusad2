@@ -1,0 +1,67 @@
+title: "Firebase バックエンド統合ガイド"
+version: "2.0.0 (Next.js 16 + Firebase)"
+last_updated: "2026-01-20"
+description: "FirebaseをバックエンドとしたWebアプリケーション開発のベストプラクティス"
+
+sections:
+  - name: "Firebase プロジェクトセットアップ"
+    content: |
+      ## Firebaseプロジェクトの作成
+      
+      ### 1. Firebase Consoleでの設定
+      ```bash
+      # 1. https://console.firebase.google.com/ にアクセス
+      # 2. 「プロジェクトを追加」をクリック
+      # 3. プロジェクト名を入力（例: my-webapp）
+      # 4. Google Analyticsは任意で有効化
+      # 5. プロジェクトを作成
+      ```
+      
+      ### 2. Webアプリの追加
+      ```bash
+      # 1. プロジェクトの概要 > ⚙️（設定） > プロジェクトの設定
+      # 2. 「アプリを追加」 > Webアイコン（</>）を選択
+      # 3. アプリのニックネームを入力
+      # 4. Firebase Hostingは「設定しない」（Vercelを使用）
+      # 5. 設定情報をコピー
+      ```
+      
+      ### 3. 環境変数の設定
+      ```bash
+      # .env.local
+      # Firebase Client SDK（NEXT_PUBLIC_で始まる = クライアント側で使用可能）
+      NEXT_PUBLIC_FIREBASE_API_KEY="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="my-webapp.firebaseapp.com"
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID="my-webapp"
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="my-webapp.appspot.com"
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="123456789012"
+      NEXT_PUBLIC_FIREBASE_APP_ID="1:123456789012:web:abcdef123456"
+      
+      # Firebase Admin SDK（サーバー側のみで使用）
+      FIREBASE_PROJECT_ID="my-webapp"
+      FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xxxxx@my-webapp.iam.gserviceaccount.com"
+      FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n"
+      ```
+      
+      ### 4. サービスアカウントキーの取得
+      ```bash
+      # 1. Firebase Console > プロジェクトの設定 > サービスアカウント
+      # 2. 「新しい秘密鍵の生成」をクリック
+      # 3. JSONファイルをダウンロード
+      # 4. JSONから以下の値を取得:
+      #    - project_id → FIREBASE_PROJECT_ID
+      #    - client_email → FIREBASE_CLIENT_EMAIL
+      #    - private_key → FIREBASE_PRIVATE_KEY（改行を\nに置換）
+      ```
+
+best_practices:
+  - "Client SDKはクライアント側（'use client'）、Admin SDKはサーバー側で使用"
+  - "環境変数はNEXT_PUBLIC_プレフィックスで公開/非公開を明確に区別"
+  - "Firestoreセキュリティルールは必ず設定（テストモードは開発時のみ）"
+  - "Server Actionsで認証チェックを必ず実装"
+  - "リアルタイムリスナーは必ずクリーンアップ（useEffectのreturn）"
+  - "Admin SDKの秘密鍵は絶対にクライアント側に公開しない"
+  - "Storageのファイルサイズ・タイプ制限を設定"
+  - "Firebase Consoleで使用量を定期的に確認"
+  - "本番環境ではFirebase App Checkを有効化"
+  - "エラーハンドリングを適切に実装してユーザーにフィードバック"
