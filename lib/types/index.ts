@@ -88,6 +88,13 @@ export interface Enrollment {
   id: string;
   studentId: string;
   type: EnrollmentType;
+  /**
+   * この受講登録（チケット）でのレッスン時間（分）。
+   * 例: 60 → 60分レッスン用 / 40 → 40分レッスン用。
+   * 1人の生徒が「60分×8回」「40分×4回」を別 enrollment として複数持てる。
+   * 後方互換: 既存データで未設定の場合は呼び出し側で 60 にフォールバック。
+   */
+  lessonMinutes?: number;
   registeredCount: number;
   usedCount: number;
   remainingCount: number;
@@ -96,6 +103,40 @@ export interface Enrollment {
   rescheduleAllowedCount: number;
   rescheduleUsedCount: number;
   status: EnrollmentStatus;
+  createdBy: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** lessonMinutes 未設定時のフォールバック値（既存データ互換） */
+export const DEFAULT_LESSON_MINUTES = 60;
+
+// ===========================
+// Student Groups (Semi-Private Pair Registration)
+// ===========================
+
+export type StudentGroupType = 'semi_private';
+export type StudentGroupStatus = 'active' | 'inactive';
+
+/**
+ * 生徒グループ（セミプライベート用のペア事前登録）。
+ * 管理者があらかじめ「セミプライベートで一緒に受ける2人組」を登録しておき、
+ * 予約時にメンバー全員ぶんの enrollment を同時に消費する。
+ *
+ * - 通常はメンバー2名（セミプライベート）。
+ * - 共通の担当講師を割り当て可能。
+ * - グループは固定運用（毎レッスンで違う相手と組む想定はしない）。
+ */
+export interface StudentGroup {
+  id: string;
+  name: string;
+  type: StudentGroupType;
+  /** メンバーの uid 配列（2 人以上）。順序に意味は無い。 */
+  memberIds: string[];
+  /** 共通の担当講師。空配列なら指定なし。 */
+  assignedTeacherIds: string[];
+  status: StudentGroupStatus;
+  note?: string | null;
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -141,6 +182,19 @@ export interface BookingConsumption {
   consumedReason?: ConsumptionReason | null;
 }
 
+/**
+ * 予約参加者単位での消費レコード（セミプライベートでメンバー個別に管理するため）。
+ */
+export interface BookingAttendeeConsumption {
+  studentId: string;
+  enrollmentId: string;
+  consumed: boolean;
+  consumedAt?: Timestamp | null;
+  consumedReason?: ConsumptionReason | null;
+}
+
+export type BookingType = 'private' | 'semi_private';
+
 export interface PolicySnapshot {
   rescheduleDeadlineHours: number;
   breakBufferMinutes: number;
@@ -151,8 +205,39 @@ export interface PrivateBooking {
   id: string;
   slotId: string;
   teacherId: string;
+  /**
+   * 代表者の uid。
+   * セミプライベートの場合も「予約を主導した1名」を入れる（後方互換／検索用）。
+   */
   studentId: string;
+  /** 代表者の enrollment id（後方互換） */
   enrollmentId: string;
+  /**
+   * 実際に予約されたレッスン時間（分）。記録用。
+   * 通常は消費した enrollment.lessonMinutes と一致する。
+   */
+  lessonMinutes?: number;
+  /**
+   * レッスン種別。未指定の場合は 'private' とみなす（後方互換）。
+   */
+  type?: BookingType;
+  /**
+   * セミプライベート時に設定されるグループ ID。
+   * プライベートの場合は null / undefined。
+   */
+  groupId?: string | null;
+  /**
+   * 参加者全員の uid 一覧（セミプライベートで使用）。
+   * クライアントからの絞り込みクエリに使うため flat な配列で持つ。
+   * プライベート単独の場合は省略可。
+   */
+  attendeeStudentIds?: string[];
+  /**
+   * 参加者ごとの消費状況。
+   * セミプライベートはメンバー人数分のエントリが入る。
+   * プライベート単独の場合は省略可（既存の `consumption` を参照）。
+   */
+  attendeeConsumptions?: BookingAttendeeConsumption[];
   status: BookingStatus;
   bookedAt: Timestamp;
   bookedBy: string; // uid (student or admin)

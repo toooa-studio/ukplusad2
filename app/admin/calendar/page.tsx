@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ProtectedRoute } from '@/lib/components/ProtectedRoute';
 import { AdminLayout } from '@/lib/components/AdminLayout';
-import { getWeekDates, getWeekRangeBounds, formatDate, getDayName, formatTime, formatDuration, calculateOverlapLayout } from '@/lib/utils';
+import { getWeekDates, getWeekRangeBounds, formatDate, getDayName, formatTime, formatDuration, calculateOverlapLayout, BOOKING_DURATION_STEP_MINUTES, generateMinuteStepOptions } from '@/lib/utils';
 import { PrivateSlot, PrivateBooking, AppUser } from '@/lib/types';
 import { collection, query, where, getDocs, Timestamp, doc, setDoc, deleteDoc, updateDoc, deleteField } from 'firebase/firestore';
 import {
@@ -14,9 +14,10 @@ import {
   slotWeekCellComputedStyle,
 } from '@/lib/scheduleSlotStyle';
 import { SlotWeekColorPresetStrip } from '@/lib/components/SlotWeekColorPresetStrip';
+import { BookingCreatorPanel } from '@/lib/components/BookingCreatorPanel';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { X, ChevronLeft, ChevronRight, Clock, User, Video, FileText, Trash2, XCircle, RotateCcw, Lock, Unlock, Calendar, CalendarDays } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Clock, User, Users, Video, FileText, Trash2, XCircle, RotateCcw, Lock, Unlock, Calendar, CalendarDays } from 'lucide-react';
 
 const HOUR_HEIGHT = 80;
 const START_HOUR = 9;
@@ -392,7 +393,21 @@ export default function CalendarPage() {
 
                           const booking = getBookingForSlot(slot.id);
                           const teacher = userMap[slot.teacherId];
-                          const student = booking ? userMap[booking.studentId] : null;
+                          const attendeeIds: string[] = booking
+                            ? booking.attendeeStudentIds && booking.attendeeStudentIds.length > 0
+                              ? booking.attendeeStudentIds
+                              : booking.studentId
+                                ? [booking.studentId]
+                                : []
+                            : [];
+                          const attendeeNames = attendeeIds
+                            .map((sid) => userMap[sid]?.displayName || userMap[sid]?.email || '')
+                            .filter(Boolean);
+                          const bookingLabel = attendeeNames.length === 0
+                            ? null
+                            : attendeeNames.length === 1
+                              ? attendeeNames[0]
+                              : `${attendeeNames.join(' / ')}（ペア）`;
                           const isCancelled = booking && (booking.status === 'cancelled_consumed' || booking.status === 'rescheduled');
                           const effectiveStatus: 'open' | 'booked' | 'closed' =
                             booking && !isCancelled
@@ -432,7 +447,7 @@ export default function CalendarPage() {
                                 {height > 64 && (
                                   isCancelled
                                     ? <div className="truncate mt-auto opacity-70">キャンセル済</div>
-                                    : booking && student && <div className="truncate mt-auto opacity-70">{student.displayName}</div>
+                                    : booking && bookingLabel && <div className="truncate mt-auto opacity-70">{bookingLabel}</div>
                                 )}
                               </div>
                             </div>
@@ -512,9 +527,9 @@ function AddBookingModal({ teachers, onClose, onSuccess }: AddBookingModalProps)
   const [submitting, setSubmitting] = useState(false);
 
   const hourOptions = Array.from({ length: 13 }, (_, i) => i + 9);
-  const minuteOptions = Array.from({ length: 60 }, (_, i) => i);
+  const minuteOptions = generateMinuteStepOptions();
   const durationHourOptions = Array.from({ length: 13 }, (_, i) => i);
-  const durationMinuteOptions = Array.from({ length: 60 }, (_, i) => i);
+  const durationMinuteOptions = generateMinuteStepOptions();
 
   const totalDuration = durationHour * 60 + durationMinute;
 
@@ -532,6 +547,14 @@ function AddBookingModal({ teachers, onClose, onSuccess }: AddBookingModalProps)
     }
     if (totalDuration <= 0) {
       setError('空き枠の時間を1分以上に設定してください。');
+      return;
+    }
+    if (totalDuration % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setError(`空き枠の時間は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
+      return;
+    }
+    if (startMinute % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setError(`開始時刻は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
       return;
     }
 
@@ -754,7 +777,6 @@ function SlotDetailModal({ slot, booking, userMap, onClose, onDelete, onRefresh 
   const [slotColorSaving, setSlotColorSaving] = useState(false);
   const [slotColorMessage, setSlotColorMessage] = useState('');
   const teacher = userMap[slot.teacherId];
-  const student = booking ? userMap[booking.studentId] : null;
   const startDate = slot.startAt.toDate();
   const endDate = slot.endAt.toDate();
   const durationMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
@@ -936,22 +958,70 @@ function SlotDetailModal({ slot, booking, userMap, onClose, onDelete, onRefresh 
             <div className={`border rounded p-4 space-y-3 ${
               isCancelled ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'
             }`}>
-              <div className={`text-sm font-medium ${isCancelled ? 'text-orange-800' : 'text-blue-800'}`}>
-                予約情報
-              </div>
-
-              <div className="flex items-center gap-3">
-                <User className={`w-5 h-5 flex-shrink-0 ${isCancelled ? 'text-orange-400' : 'text-blue-400'}`} />
-                <div>
-                  <div className={`text-xs ${isCancelled ? 'text-orange-600' : 'text-blue-600'}`}>生徒</div>
-                  <div className={`text-sm font-medium ${isCancelled ? 'text-orange-900' : 'text-blue-900'}`}>
-                    {student?.displayName || '不明'}
-                  </div>
-                  {student?.email && (
-                    <div className={`text-xs ${isCancelled ? 'text-orange-600' : 'text-blue-600'}`}>{student.email}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className={`text-sm font-medium ${isCancelled ? 'text-orange-800' : 'text-blue-800'}`}>
+                  予約情報
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {booking.type === 'semi_private' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full">
+                      <Users className="w-3 h-3" />
+                      セミプライベート
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-sky-100 text-sky-800 rounded-full">
+                      <User className="w-3 h-3" />
+                      プライベート
+                    </span>
+                  )}
+                  {booking.lessonMinutes && (
+                    <span className="px-2 py-0.5 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-full">
+                      {booking.lessonMinutes}分
+                    </span>
                   )}
                 </div>
               </div>
+
+              {(() => {
+                const attendeeIds: string[] =
+                  booking.attendeeStudentIds && booking.attendeeStudentIds.length > 0
+                    ? booking.attendeeStudentIds
+                    : booking.studentId
+                      ? [booking.studentId]
+                      : [];
+                const isPair = attendeeIds.length >= 2;
+                return (
+                  <div className="flex items-start gap-3">
+                    {isPair ? (
+                      <Users className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isCancelled ? 'text-orange-400' : 'text-blue-400'}`} />
+                    ) : (
+                      <User className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isCancelled ? 'text-orange-400' : 'text-blue-400'}`} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs ${isCancelled ? 'text-orange-600' : 'text-blue-600'}`}>
+                        {isPair ? `参加者（${attendeeIds.length}名）` : '生徒'}
+                      </div>
+                      <ul className="space-y-1 mt-1">
+                        {attendeeIds.map((sid) => {
+                          const u = userMap[sid];
+                          return (
+                            <li key={sid} className="text-sm">
+                              <div className={`font-medium ${isCancelled ? 'text-orange-900' : 'text-blue-900'}`}>
+                                {u?.displayName || u?.email || '不明'}
+                              </div>
+                              {u?.email && (
+                                <div className={`text-xs ${isCancelled ? 'text-orange-600' : 'text-blue-600'}`}>
+                                  {u.email}
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className={`space-y-1 text-xs ${isCancelled ? 'text-orange-600' : 'text-blue-600'}`}>
                 <div>予約ステータス: {bookingStatusLabels[booking.status] || booking.status}</div>
@@ -1007,9 +1077,20 @@ function SlotDetailModal({ slot, booking, userMap, onClose, onDelete, onRefresh 
               )}
             </div>
           ) : (
-            <div className="border border-gray-200 rounded p-4 text-center text-sm text-gray-500">
-              まだ予約はありません
-            </div>
+            <>
+              <div className="border border-gray-200 rounded p-4 text-center text-sm text-gray-500">
+                まだ予約はありません
+              </div>
+              {slot.status === 'open' && (
+                <BookingCreatorPanel
+                  slot={slot}
+                  onSuccess={() => {
+                    onRefresh();
+                    onClose();
+                  }}
+                />
+              )}
+            </>
           )}
 
           {slot.note && (
@@ -1373,7 +1454,21 @@ function DayDetailModal({ date, daySlots, userMap, getBookingForSlot, onSlotClic
                 const end = slot.endAt.toDate();
                 const booking = getBookingForSlot(slot.id);
                 const teacher = userMap[slot.teacherId];
-                const student = booking ? userMap[booking.studentId] : null;
+                const attendeeIds: string[] = booking
+                  ? booking.attendeeStudentIds && booking.attendeeStudentIds.length > 0
+                    ? booking.attendeeStudentIds
+                    : booking.studentId
+                      ? [booking.studentId]
+                      : []
+                  : [];
+                const attendeeNames = attendeeIds
+                  .map((sid) => userMap[sid]?.displayName || userMap[sid]?.email || '')
+                  .filter(Boolean);
+                const bookingLabel = attendeeNames.length === 0
+                  ? null
+                  : attendeeNames.length === 1
+                    ? attendeeNames[0]
+                    : `${attendeeNames.join(' / ')}（ペア）`;
                 const isCancelled = booking && (booking.status === 'cancelled_consumed' || booking.status === 'rescheduled');
                 const durationMin = Math.round((end.getTime() - start.getTime()) / 60000);
 
@@ -1423,10 +1518,14 @@ function DayDetailModal({ date, daySlots, userMap, getBookingForSlot, onSlotClic
                               {teacher.displayName || teacher.email}
                             </span>
                           )}
-                          {student && (
+                          {bookingLabel && (
                             <span className="flex items-center gap-1">
-                              <User className="w-3 h-3 text-blue-500" />
-                              {student.displayName || student.email}
+                              {attendeeIds.length >= 2 ? (
+                                <Users className="w-3 h-3 text-blue-500" />
+                              ) : (
+                                <User className="w-3 h-3 text-blue-500" />
+                              )}
+                              {bookingLabel}
                             </span>
                           )}
                         </div>

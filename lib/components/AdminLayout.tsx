@@ -9,6 +9,7 @@ import {
   CalendarDays,
   GraduationCap,
   Users,
+  UsersRound,
   BookOpen,
   Megaphone,
   Ticket,
@@ -70,6 +71,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             <SidebarLink href="/admin" icon={<LayoutDashboard className="w-5 h-5" />} label="ダッシュボード" />
             <SidebarLink href="/admin/calendar" icon={<CalendarDays className="w-5 h-5" />} label="予約カレンダー" />
             <SidebarLink href="/admin/students" icon={<GraduationCap className="w-5 h-5" />} label="生徒管理" />
+            <SidebarLink href="/admin/groups" icon={<UsersRound className="w-5 h-5" />} label="ペア管理" />
             <SidebarLink href="/admin/teachers" icon={<Users className="w-5 h-5" />} label="教師管理" />
             <SidebarLink href="/admin/sessions" icon={<BookOpen className="w-5 h-5" />} label="授業管理" />
             <SidebarLink href="/admin/announcements" icon={<Megaphone className="w-5 h-5" />} label="お知らせ" />

@@ -22,6 +22,7 @@ import { db } from '@/lib/firebase/client';
 import {
   toDate, formatDateJa, formatTime, formatDuration,
   formatDate, getWeekDates, getWeekRangeBounds, getDayName, calculateOverlapLayout,
+  BOOKING_DURATION_STEP_MINUTES, generateMinuteStepOptions,
 } from '@/lib/utils';
 import {
   ChevronLeft, ChevronRight, Plus, X, Clock, User,
@@ -749,9 +750,9 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
   const [error, setError] = useState('');
 
   const hourOptions = Array.from({ length: 13 }, (_, i) => i + 9);
-  const minuteOptions = Array.from({ length: 60 }, (_, i) => i);
+  const minuteOptions = generateMinuteStepOptions();
   const durationHourOptions = Array.from({ length: 13 }, (_, i) => i);
-  const durationMinuteOptions = Array.from({ length: 60 }, (_, i) => i);
+  const durationMinuteOptions = generateMinuteStepOptions();
 
   const totalDuration = durationHour * 60 + durationMinute;
 
@@ -762,6 +763,14 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
 
     if (totalDuration <= 0) {
       setError('空き枠の時間を1分以上に設定してください。');
+      return;
+    }
+    if (totalDuration % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setError(`空き枠の時間は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
+      return;
+    }
+    if (startMinute % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setError(`開始時刻は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
       return;
     }
 
@@ -950,9 +959,9 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
   const dur = Math.round((end.getTime() - start.getTime()) / 60000);
 
   const hourOptions = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
-  const minuteOptions = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
+  const minuteOptions = useMemo(() => generateMinuteStepOptions(), []);
   const durHourOptions = useMemo(() => Array.from({ length: 13 }, (_, i) => i), []);
-  const durMinuteOptions = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
+  const durMinuteOptions = useMemo(() => generateMinuteStepOptions(), []);
 
   useEffect(() => {
     const s = toDate(slot.startAt);
@@ -1065,6 +1074,14 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
     const totalMin = editDurH * 60 + editDurM;
     if (totalMin <= 0) {
       setEditError('枠の長さは1分以上にしてください');
+      return;
+    }
+    if (totalMin % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setEditError(`枠の長さは ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください`);
+      return;
+    }
+    if (editStartM % BOOKING_DURATION_STEP_MINUTES !== 0) {
+      setEditError(`開始時刻は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください`);
       return;
     }
     setProcessing(true);

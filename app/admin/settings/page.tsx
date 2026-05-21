@@ -7,6 +7,7 @@ import { AppSettings } from '@/lib/types';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { Settings, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BOOKING_DURATION_STEP_MINUTES } from '@/lib/utils';
 
 const SETTINGS_DOC = 'general';
 
@@ -136,10 +137,13 @@ export default function SettingsPage() {
                 onChange={e => setSettings(prev => ({ ...prev, privateLessonDurationMinutes: Number(e.target.value) }))}
                 className="input-field"
               >
-                {[15, 30, 45, 60, 75, 90, 120].map(m => (
+                {[30, 60, 90, 120, 150, 180].map(m => (
                   <option key={m} value={m}>{m}分</option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-500">
+                予約時間は {BOOKING_DURATION_STEP_MINUTES} 分単位で設定されます。
+              </p>
             </Field>
             <Field label="授業準備時間・休憩バッファ（分）">
               <input

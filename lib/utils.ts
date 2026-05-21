@@ -6,6 +6,32 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * 予約時間の最少単位（分）。
+ * 空き枠の開始時刻・レッスン時間はこの値の倍数で指定する。
+ */
+export const BOOKING_DURATION_STEP_MINUTES = 30;
+
+/**
+ * 0〜59 分のうち、step 分単位の値だけを返す。
+ * 例: step=30 → [0, 30] / step=15 → [0, 15, 30, 45]
+ */
+export function generateMinuteStepOptions(step: number = BOOKING_DURATION_STEP_MINUTES): number[] {
+  if (step <= 0 || step > 60) return [0];
+  const out: number[] = [];
+  for (let m = 0; m < 60; m += step) out.push(m);
+  return out;
+}
+
+/**
+ * 任意の分の値を step 単位に丸める（最も近い倍数に向けて切り捨て）。
+ * 例: roundDownToStep(45, 30) → 30
+ */
+export function roundDownToStep(minutes: number, step: number = BOOKING_DURATION_STEP_MINUTES): number {
+  if (step <= 0) return minutes;
+  return Math.floor(minutes / step) * step;
+}
+
+/**
  * Timestamp型をDateに変換
  */
 export function toDate(timestamp: any): Date {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ProtectedRoute } from '@/lib/components/ProtectedRoute';
 import { AdminLayout } from '@/lib/components/AdminLayout';
-import { AppUser, Enrollment } from '@/lib/types';
+import { AppUser, Enrollment, DEFAULT_LESSON_MINUTES } from '@/lib/types';
 import { collection, getDocs, query, where, doc, setDoc, Timestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, createUserWithoutSignIn } from '@/lib/firebase/client';
 import { deleteAuthUser } from '@/lib/auth';
@@ -139,7 +139,13 @@ export default function StudentsPage() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredStudents.map((student) => {
                       const studentEnrollments = enrollments[student.id] || [];
-                      const activeEnrollment = studentEnrollments.find(e => e.status === 'active');
+                      const activeEnrollments = studentEnrollments.filter(e => e.status === 'active');
+                      const earliestValidUntil = activeEnrollments.length > 0
+                        ? activeEnrollments.reduce((min, e) => {
+                            const d = toDate(e.validUntil);
+                            return !min || d.getTime() < min.getTime() ? d : min;
+                          }, null as Date | null)
+                        : null;
 
                       return (
                         <tr key={student.id} className="hover:bg-gray-50">
@@ -163,14 +169,33 @@ export default function StudentsPage() {
                               <span className="text-gray-400 text-xs">制限なし</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {activeEnrollment ? `${activeEnrollment.remainingCount}回` : '-'}
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {activeEnrollments.length === 0 ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                {activeEnrollments.map(e => {
+                                  const lm = e.lessonMinutes ?? DEFAULT_LESSON_MINUTES;
+                                  const isLow = e.remainingCount <= 2;
+                                  return (
+                                    <span key={e.id} className="inline-flex items-center gap-1 whitespace-nowrap">
+                                      <span className="px-1.5 py-0.5 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-full">
+                                        {lm}分
+                                      </span>
+                                      <span className={`text-sm ${isLow ? 'text-red-600 font-bold' : 'text-gray-900'}`}>
+                                        × 残{e.remainingCount}回
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {activeEnrollment ? formatDateJa(toDate(activeEnrollment.validUntil)) : '-'}
+                            {earliestValidUntil ? formatDateJa(earliestValidUntil) : '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {activeEnrollment ? (
+                            {activeEnrollments.length > 0 ? (
                               <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">アクティブ</span>
                             ) : (
                               <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">登録なし</span>
@@ -687,10 +712,14 @@ interface EnrollmentCardProps {
 function EnrollmentCard({ enrollment, statusLabels, statusColors, typeLabels, onUpdate }: EnrollmentCardProps) {
   const [editing, setEditing] = useState(false);
   const [newCount, setNewCount] = useState(enrollment.registeredCount);
+  const [newLessonMinutes, setNewLessonMinutes] = useState<number>(
+    enrollment.lessonMinutes ?? DEFAULT_LESSON_MINUTES,
+  );
   const [newValidUntil, setNewValidUntil] = useState(
     formatDate(toDate(enrollment.validUntil))
   );
   const [saving, setSaving] = useState(false);
+  const lessonMinutes = enrollment.lessonMinutes ?? DEFAULT_LESSON_MINUTES;
 
   const handleSave = async () => {
     if (!db) return;
@@ -701,6 +730,7 @@ function EnrollmentCard({ enrollment, statusLabels, statusColors, typeLabels, on
         registeredCount: newCount,
         remainingCount: remaining < 0 ? 0 : remaining,
         rescheduleAllowedCount: calculateRescheduleAllowed(newCount),
+        lessonMinutes: newLessonMinutes,
         validUntil: Timestamp.fromDate(new Date(newValidUntil + 'T23:59:59')),
         status: remaining <= 0 ? 'depleted' : 'active',
         updatedAt: Timestamp.now(),
@@ -717,9 +747,14 @@ function EnrollmentCard({ enrollment, statusLabels, statusColors, typeLabels, on
   return (
     <div className="border border-gray-200 rounded-none p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[enrollment.status]}`}>
-          {statusLabels[enrollment.status]}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[enrollment.status]}`}>
+            {statusLabels[enrollment.status]}
+          </span>
+          <span className="px-2 py-0.5 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-full">
+            {lessonMinutes}分レッスン
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{typeLabels[enrollment.type]}</span>
           {!editing && enrollment.status === 'active' && (
@@ -732,7 +767,19 @@ function EnrollmentCard({ enrollment, statusLabels, statusColors, typeLabels, on
 
       {editing ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">レッスン時間</label>
+              <select
+                value={newLessonMinutes}
+                onChange={(e) => setNewLessonMinutes(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[44px]"
+              >
+                {[30, 40, 45, 60, 75, 90, 120].map((m) => (
+                  <option key={m} value={m}>{m}分</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">登録回数</label>
               <input
@@ -874,12 +921,15 @@ function AddStudentModal({ onClose, onSuccess }: AddStudentModalProps) {
           <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md text-sm">
             <p className="font-medium mb-1">自動設定される内容：</p>
             <ul className="text-xs space-y-1 ml-4 list-disc">
+              <li>レッスン時間: 60分</li>
               <li>登録回数: 8回</li>
               <li>有効期限: 3ヶ月後</li>
               <li>ステータス: アクティブ</li>
               <li>振替可能回数: 2回</li>
             </ul>
-            <p className="text-xs mt-2 text-blue-600">※ 後から編集可能です</p>
+            <p className="text-xs mt-2 text-blue-600">
+              ※ 後から編集可能です。40分など別時間のレッスンを追加したい場合は、生徒詳細・受講管理から複数登録できます。
+            </p>
           </div>
 
           {error && (

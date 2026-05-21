@@ -50,14 +50,40 @@ service cloud.firestore {
         (isTeacher() && resource.data.teacherId == request.auth.uid);
     }
 
-    // プライベート予約
+    // プライベート / セミプライベート予約
     match /privateBookings/{bookingId} {
+      // 教師は全件読取可能。生徒は自分が代表者 or 参加者として含まれる予約のみ読取可能。
       allow read: if isTeacher() ||
-        (isStudent() && resource.data.studentId == request.auth.uid);
+        (isStudent() && (
+          resource.data.studentId == request.auth.uid ||
+          (resource.data.attendeeStudentIds is list &&
+            request.auth.uid in resource.data.attendeeStudentIds)
+        ));
+      // 生徒からの作成は自分が代表者 or 参加者として含まれる場合のみ。
+      // ただし通常はサーバー側 (Admin SDK) で作成する想定。
       allow create: if isAdmin() ||
-        (isStudent() && request.resource.data.studentId == request.auth.uid);
+        (isStudent() && (
+          request.resource.data.studentId == request.auth.uid ||
+          (request.resource.data.attendeeStudentIds is list &&
+            request.auth.uid in request.resource.data.attendeeStudentIds)
+        ));
+      // 更新・削除も同条件。実運用では Admin SDK 経由を推奨。
       allow update, delete: if isAdmin() || isTeacher() ||
-        (isStudent() && resource.data.studentId == request.auth.uid);
+        (isStudent() && (
+          resource.data.studentId == request.auth.uid ||
+          (resource.data.attendeeStudentIds is list &&
+            request.auth.uid in resource.data.attendeeStudentIds)
+        ));
+    }
+
+    // 生徒グループ（セミプライベートのペア事前登録）
+    // 管理者のみが作成・編集・削除可能。
+    // 講師は全件読取、生徒はメンバーである自分のグループのみ読取可能。
+    match /studentGroups/{groupId} {
+      allow read: if isTeacher() ||
+        (isStudent() && resource.data.memberIds is list &&
+          request.auth.uid in resource.data.memberIds);
+      allow create, update, delete: if isAdmin();
     }
 
     // お知らせ

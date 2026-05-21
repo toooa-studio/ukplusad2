@@ -83,6 +83,7 @@ export async function createUserWithoutSignIn(
         id: enrollmentRef.id,
         studentId: newUser.uid,
         type: 'ticket_bundle',
+        lessonMinutes: 60,
         registeredCount: 8,
         usedCount: 0,
         remainingCount: 8,

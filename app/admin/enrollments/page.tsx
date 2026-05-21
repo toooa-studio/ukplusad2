@@ -1,22 +1,44 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ProtectedRoute } from '@/lib/components/ProtectedRoute';
 import { AdminLayout } from '@/lib/components/AdminLayout';
-import { AppUser, Enrollment } from '@/lib/types';
+import { AppUser, Enrollment, DEFAULT_LESSON_MINUTES } from '@/lib/types';
 import { calculateRescheduleAllowed } from '@/lib/types';
-import { collection, getDocs, query, where, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  doc,
+  setDoc,
+  updateDoc,
+  Timestamp,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { formatDate, formatDateJa, toDate } from '@/lib/utils';
-import { Ticket, AlertTriangle, CheckCircle, Clock, Edit2, X } from 'lucide-react';
+import {
+  Ticket,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Edit2,
+  X,
+  Plus,
+} from 'lucide-react';
 
 type EnrichedEnrollment = Enrollment & { studentName: string; studentEmail: string };
 
+const LESSON_MINUTES_OPTIONS = [30, 40, 45, 60, 75, 90, 120];
+
 export default function EnrollmentsPage() {
   const [enrollments, setEnrollments] = useState<EnrichedEnrollment[]>([]);
+  const [students, setStudents] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'expired' | 'depleted'>('all');
   const [editingEnrollment, setEditingEnrollment] = useState<EnrichedEnrollment | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     loadEnrollments();
@@ -31,10 +53,11 @@ export default function EnrollmentsPage() {
       const enrollData = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Enrollment[];
 
       const studentsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'student')));
+      const studentsData = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as AppUser);
+      setStudents(studentsData);
       const studentsMap: Record<string, AppUser> = {};
-      studentsSnap.docs.forEach(d => {
-        const data = d.data() as AppUser;
-        studentsMap[d.id] = data;
+      studentsData.forEach(s => {
+        studentsMap[s.id] = s;
       });
 
       const enriched = enrollData.map(e => ({
@@ -87,9 +110,20 @@ export default function EnrollmentsPage() {
     <ProtectedRoute allowedRoles={['admin']}>
       <AdminLayout>
         <div className="space-y-6">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">受講管理</h2>
-            <p className="mt-1 text-sm text-gray-600">全生徒の受講状況・回数券の使用状況を一覧で管理</p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 whitespace-nowrap">受講管理</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                全生徒の受講状況・回数券の使用状況を一覧で管理（レッスン時間ごとに別チケットで管理）
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-[6px] hover:bg-blue-700 transition-colors min-h-[44px] whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              受講登録を追加
+            </button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -174,14 +208,15 @@ export default function EnrollmentsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">タイプ</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">残り / 登録</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">使用済み</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">振替</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">有効期限</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">生徒</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">タイプ</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">レッスン時間</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">残り / 登録</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">使用済み</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">振替</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">有効期限</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">ステータス</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">操作</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -192,6 +227,7 @@ export default function EnrollmentsPage() {
                         return daysLeft <= 7;
                       })();
                       const isLowCount = enrollment.status === 'active' && enrollment.remainingCount <= 2;
+                      const lessonMinutes = enrollment.lessonMinutes ?? DEFAULT_LESSON_MINUTES;
 
                       return (
                         <tr key={enrollment.id} className="hover:bg-gray-50">
@@ -201,6 +237,11 @@ export default function EnrollmentsPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                             {typeLabels[enrollment.type]}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-full">
+                              {lessonMinutes}分
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`text-sm font-bold ${isLowCount ? 'text-red-600' : 'text-gray-900'}`}>
@@ -255,10 +296,25 @@ export default function EnrollmentsPage() {
             }}
           />
         )}
+
+        {showAddModal && (
+          <AddEnrollmentModal
+            students={students}
+            onClose={() => setShowAddModal(false)}
+            onSuccess={() => {
+              setShowAddModal(false);
+              loadEnrollments();
+            }}
+          />
+        )}
       </AdminLayout>
     </ProtectedRoute>
   );
 }
+
+// =====================================================================
+// 受講登録: 編集モーダル
+// =====================================================================
 
 interface EditEnrollmentModalProps {
   enrollment: EnrichedEnrollment;
@@ -268,6 +324,9 @@ interface EditEnrollmentModalProps {
 
 function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentModalProps) {
   const [registeredCount, setRegisteredCount] = useState(enrollment.registeredCount);
+  const [lessonMinutes, setLessonMinutes] = useState<number>(
+    enrollment.lessonMinutes ?? DEFAULT_LESSON_MINUTES,
+  );
   const [validUntil, setValidUntil] = useState(formatDate(toDate(enrollment.validUntil)));
   const [status, setStatus] = useState(enrollment.status);
   const [saving, setSaving] = useState(false);
@@ -281,8 +340,13 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentM
     if (!db) return;
     setError('');
     setSuccess('');
-    setSaving(true);
 
+    if (lessonMinutes <= 0) {
+      setError('レッスン時間は1分以上にしてください');
+      return;
+    }
+
+    setSaving(true);
     try {
       const [year, month, day] = validUntil.split('-').map(Number);
       const validUntilDate = new Date(year, month - 1, day, 23, 59, 59);
@@ -291,6 +355,7 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentM
         registeredCount,
         remainingCount: newRemaining,
         rescheduleAllowedCount: newRescheduleAllowed,
+        lessonMinutes,
         validUntil: Timestamp.fromDate(validUntilDate),
         status,
         updatedAt: Timestamp.now(),
@@ -310,7 +375,7 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-none border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="bg-white rounded-none border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
@@ -331,6 +396,27 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentM
               タイプ: {enrollment.type === 'ticket_bundle' ? '回数券' : '月額登録'}
               {' | '}使用済み: {enrollment.usedCount}回
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="edit-lesson-minutes" className="block text-sm font-medium text-gray-700">
+              レッスン時間（分）
+            </label>
+            <select
+              id="edit-lesson-minutes"
+              value={lessonMinutes}
+              onChange={(e) => setLessonMinutes(Number(e.target.value))}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-h-[44px]"
+            >
+              {LESSON_MINUTES_OPTIONS.map((m) => (
+                <option key={m} value={m}>
+                  {m}分
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              この受講登録のレッスン時間を変更します。予約時はこの時間に一致する時間枠でのみ消費されます。
+            </p>
           </div>
 
           <div>
@@ -435,6 +521,275 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }: EditEnrollmentM
               className="flex-1 py-3 px-4 text-sm font-medium rounded-[6px] text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors min-h-[44px]"
             >
               {saving ? '保存中...' : '保存する'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 受講登録: 新規追加モーダル
+// =====================================================================
+
+interface AddEnrollmentModalProps {
+  students: AppUser[];
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function AddEnrollmentModal({ students, onClose, onSuccess }: AddEnrollmentModalProps) {
+  const { user } = useAuth();
+  const [studentId, setStudentId] = useState<string>('');
+  const [type, setType] = useState<Enrollment['type']>('ticket_bundle');
+  const [lessonMinutes, setLessonMinutes] = useState<number>(DEFAULT_LESSON_MINUTES);
+  const [registeredCount, setRegisteredCount] = useState<number>(8);
+  const [validUntil, setValidUntil] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return formatDate(d);
+  });
+  const [studentSearch, setStudentSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const filteredStudents = useMemo(
+    () =>
+      students.filter((s) => {
+        if (!studentSearch) return true;
+        const q = studentSearch.toLowerCase();
+        return (
+          s.displayName?.toLowerCase().includes(q) ||
+          s.email?.toLowerCase().includes(q)
+        );
+      }),
+    [students, studentSearch],
+  );
+
+  const newRescheduleAllowed = calculateRescheduleAllowed(registeredCount);
+
+  const handleSave = async () => {
+    if (!db) {
+      setError('Firestore に接続できません');
+      return;
+    }
+    if (!studentId) {
+      setError('生徒を選択してください');
+      return;
+    }
+    if (registeredCount <= 0) {
+      setError('登録回数は1回以上を指定してください');
+      return;
+    }
+    if (lessonMinutes <= 0) {
+      setError('レッスン時間は1分以上を指定してください');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const [year, month, day] = validUntil.split('-').map(Number);
+      const validUntilDate = new Date(year, month - 1, day, 23, 59, 59);
+      const now = Timestamp.now();
+      const ref = doc(collection(db, 'enrollments'));
+      await setDoc(ref, {
+        id: ref.id,
+        studentId,
+        type,
+        lessonMinutes,
+        registeredCount,
+        usedCount: 0,
+        remainingCount: registeredCount,
+        validFrom: null,
+        validUntil: Timestamp.fromDate(validUntilDate),
+        rescheduleAllowedCount: newRescheduleAllowed,
+        rescheduleUsedCount: 0,
+        status: 'active',
+        createdBy: user?.uid || 'admin',
+        createdAt: now,
+        updatedAt: now,
+      });
+      onSuccess();
+    } catch (err: unknown) {
+      console.error('Error creating enrollment:', err);
+      const firebaseErr = err as { code?: string; message?: string };
+      setError(`保存に失敗しました: ${firebaseErr.code || firebaseErr.message || '不明なエラー'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-white rounded-none border border-gray-200 w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-gray-900">受講登録を追加</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="閉じる"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              生徒 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="生徒名・メールで絞り込み..."
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              className="w-full px-3 py-2 mb-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+            />
+            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-none divide-y divide-gray-100">
+              {filteredStudents.length === 0 ? (
+                <div className="p-3 text-sm text-gray-500 text-center">
+                  生徒が見つかりません
+                </div>
+              ) : (
+                filteredStudents.map((s) => {
+                  const checked = studentId === s.id;
+                  return (
+                    <label
+                      key={s.id}
+                      className={`flex items-center gap-3 p-3 cursor-pointer min-h-[44px] ${
+                        checked ? 'bg-blue-50' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="studentSelect"
+                        checked={checked}
+                        onChange={() => setStudentId(s.id)}
+                        className="w-4 h-4"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {s.displayName || '名前未設定'}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {s.email}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                タイプ
+              </label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as Enrollment['type'])}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+              >
+                <option value="ticket_bundle">回数券</option>
+                <option value="monthly_registration">月額登録</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                レッスン時間（分）
+              </label>
+              <select
+                value={lessonMinutes}
+                onChange={(e) => setLessonMinutes(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+              >
+                {LESSON_MINUTES_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}分
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="add-count" className="block text-sm font-medium text-gray-700 mb-1">
+              登録回数
+            </label>
+            <input
+              id="add-count"
+              type="number"
+              min={1}
+              value={registeredCount}
+              onChange={(e) => setRegisteredCount(Math.max(1, Number(e.target.value)))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              振替可能回数: <span className="font-bold">{newRescheduleAllowed}回</span>（自動計算）
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="add-valid" className="block text-sm font-medium text-gray-700 mb-1">
+              有効期限
+            </label>
+            <input
+              id="add-valid"
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+            />
+            <div className="mt-2 flex gap-2">
+              {[
+                { label: '+1ヶ月', months: 1 },
+                { label: '+3ヶ月', months: 3 },
+                { label: '+6ヶ月', months: 6 },
+              ].map(({ label, months }) => (
+                <button
+                  key={months}
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + months);
+                    setValidUntil(formatDate(d));
+                  }}
+                  className="px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 px-4 text-sm font-medium rounded-[6px] text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors min-h-[44px]"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3 px-4 text-sm font-medium rounded-[6px] text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+            >
+              {saving ? '保存中...' : '受講登録を追加'}
             </button>
           </div>
         </div>
