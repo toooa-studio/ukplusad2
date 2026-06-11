@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase/admin';
+import { isFirebaseAdminReady, requireAdminDb } from '@/lib/firebase/admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { BOOKING_DURATION_STEP_MINUTES } from '@/lib/utils';
 import { DEFAULT_LESSON_MINUTES } from '@/lib/types';
@@ -7,7 +7,8 @@ import { DEFAULT_LESSON_MINUTES } from '@/lib/types';
 const SETTINGS_DOC = 'general';
 
 async function getBufferMinutes(): Promise<number> {
-  const snap = await adminDb.doc(`settings/${SETTINGS_DOC}`).get();
+  const db = requireAdminDb();
+  const snap = await db.doc(`settings/${SETTINGS_DOC}`).get();
   if (snap.exists) {
     return snap.data()?.breakBufferMinutesDefault ?? 10;
   }
@@ -33,6 +34,19 @@ interface AttendeeInput {
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!isFirebaseAdminReady()) {
+      return NextResponse.json(
+        {
+          error:
+            'サーバー側の Firebase Admin が未設定です。Vercel の環境変数 '
+            + 'FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY '
+            + 'を .env.local と同じ値で設定し、再デプロイしてください。',
+        },
+        { status: 503 },
+      );
+    }
+
+    const adminDb = requireAdminDb();
     const body = await req.json();
     const {
       slotId,
