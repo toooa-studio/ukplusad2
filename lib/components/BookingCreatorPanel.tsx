@@ -50,6 +50,7 @@ export function BookingCreatorPanel({ slot, onSuccess }: BookingCreatorPanelProp
   const [bookingType, setBookingType] = useState<BookingType>('private');
 
   const [students, setStudents] = useState<AppUser[]>([]);
+  const [teachers, setTeachers] = useState<AppUser[]>([]);
   const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [enrollmentsByStudent, setEnrollmentsByStudent] = useState<
     Record<string, Enrollment[]>
@@ -78,13 +79,17 @@ export function BookingCreatorPanel({ slot, onSuccess }: BookingCreatorPanelProp
         return;
       }
       try {
-        const [studentsSnap, groupsSnap, enrollSnap] = await Promise.all([
+        const [studentsSnap, teachersSnap, groupsSnap, enrollSnap] = await Promise.all([
           getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'teacher'))),
           getDocs(query(collection(db, 'studentGroups'), where('status', '==', 'active'))),
           getDocs(query(collection(db, 'enrollments'), where('status', '==', 'active'))),
         ]);
 
         const allStudents = studentsSnap.docs.map(
+          (d) => ({ id: d.id, ...d.data() }) as AppUser,
+        );
+        const allTeachers = teachersSnap.docs.map(
           (d) => ({ id: d.id, ...d.data() }) as AppUser,
         );
         const allGroups = groupsSnap.docs.map(
@@ -101,6 +106,7 @@ export function BookingCreatorPanel({ slot, onSuccess }: BookingCreatorPanelProp
         });
 
         setStudents(allStudents);
+        setTeachers(allTeachers);
         setGroups(allGroups);
         setEnrollmentsByStudent(map);
       } catch (err) {
@@ -112,21 +118,28 @@ export function BookingCreatorPanel({ slot, onSuccess }: BookingCreatorPanelProp
     loadAll();
   }, []);
 
-  // ペア（セミプライベート）でこの講師が担当しているもの・全員 enrollment を持っているものに絞り込む
-  const eligibleGroups = useMemo(() => {
-    return groups.filter((g) => {
-      if (g.assignedTeacherIds && g.assignedTeacherIds.length > 0) {
-        if (!g.assignedTeacherIds.includes(slot.teacherId)) return false;
-      }
-      // メンバー全員が active enrollment を1つでも持っているか
-      return g.memberIds.every((mid) => (enrollmentsByStudent[mid] || []).length > 0);
-    });
-  }, [groups, slot.teacherId, enrollmentsByStudent]);
+  const teacherMap = useMemo(() => {
+    const m: Record<string, AppUser> = {};
+    teachers.forEach((t) => { m[t.id] = t; });
+    return m;
+  }, [teachers]);
 
+  const slotTeacher = teacherMap[slot.teacherId];
+
+  // 管理者の代理予約では、アクティブなペアをすべて表示する。
+  // （担当講師の指定は iOS 生徒向けの目安であり、管理者は柔軟に予約できる）
+  const bookableGroups = useMemo(() => groups, [groups]);
   const selectedGroup = useMemo(
-    () => eligibleGroups.find((g) => g.id === selectedGroupId) || null,
-    [eligibleGroups, selectedGroupId],
+    () => bookableGroups.find((g) => g.id === selectedGroupId) || null,
+    [bookableGroups, selectedGroupId],
   );
+
+  const selectedGroupTeacherMismatch = useMemo(() => {
+    if (!selectedGroup) return false;
+    const ids = selectedGroup.assignedTeacherIds || [];
+    if (ids.length === 0) return false;
+    return !ids.includes(slot.teacherId);
+  }, [selectedGroup, slot.teacherId]);
 
   /**
    * セミプライベート選択時の「各候補レッスン時間ごとの利用可否」マップ。
@@ -342,8 +355,13 @@ export function BookingCreatorPanel({ slot, onSuccess }: BookingCreatorPanelProp
         />
       ) : (
         <SemiPrivateInputs
-          groups={eligibleGroups}
+          groups={bookableGroups}
           students={students}
+          teacherMap={teacherMap}
+          slotTeacherId={slot.teacherId}
+          slotTeacherName={slotTeacher?.displayName || slotTeacher?.email}
+          teacherMismatch={selectedGroupTeacherMismatch}
+          selectedGroupAssignedTeacherIds={selectedGroup?.assignedTeacherIds || []}
           enrollmentsByStudent={enrollmentsByStudent}
           selectedGroupId={selectedGroupId}
           setSelectedGroupId={setSelectedGroupId}
@@ -512,6 +530,11 @@ function PrivateInputs({
 interface SemiPrivateInputsProps {
   groups: StudentGroup[];
   students: AppUser[];
+  teacherMap: Record<string, AppUser>;
+  slotTeacherId: string;
+  slotTeacherName?: string;
+  teacherMismatch: boolean;
+  selectedGroupAssignedTeacherIds: string[];
   enrollmentsByStudent: Record<string, Enrollment[]>;
   selectedGroupId: string;
   setSelectedGroupId: (v: string) => void;
@@ -527,6 +550,11 @@ interface SemiPrivateInputsProps {
 function SemiPrivateInputs({
   groups,
   students,
+  teacherMap,
+  slotTeacherId,
+  slotTeacherName,
+  teacherMismatch,
+  selectedGroupAssignedTeacherIds,
   enrollmentsByStudent,
   selectedGroupId,
   setSelectedGroupId,
@@ -552,7 +580,7 @@ function SemiPrivateInputs({
         </label>
         {groups.length === 0 ? (
           <div className="text-sm text-red-600">
-            このスロットの講師に紐づく有効なペアがありません。先に「ペア管理」から作成してください。
+            アクティブなペアがありません。先に「ペア管理」から作成してください。
           </div>
         ) : (
           <select
@@ -561,14 +589,31 @@ function SemiPrivateInputs({
             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[44px]"
           >
             <option value="">選択してください</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}（{g.memberIds.length}名）
-              </option>
-            ))}
+            {groups.map((g) => {
+              const assigned = g.assignedTeacherIds || [];
+              const mismatch =
+                assigned.length > 0 && !assigned.includes(slotTeacherId);
+              return (
+                <option key={g.id} value={g.id}>
+                  {g.name}（{g.memberIds.length}名）
+                  {mismatch ? ' ※担当講師不一致' : ''}
+                </option>
+              );
+            })}
           </select>
         )}
       </div>
+
+      {teacherMismatch && (
+        <div className="border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 rounded-md text-xs">
+          このペアの担当講師（
+          {selectedGroupAssignedTeacherIds
+            .map((id) => teacherMap[id]?.displayName || teacherMap[id]?.email || id)
+            .join('、')}
+          ）と、このスロットの講師（{slotTeacherName || slotTeacherId}）が一致しません。
+          管理者の代理予約では予約できますが、生徒アプリではこの講師のスロットに表示されない場合があります。
+        </div>
+      )}
 
       {selectedGroup && (
         <div className="border border-gray-100 bg-gray-50 rounded p-3 space-y-2">

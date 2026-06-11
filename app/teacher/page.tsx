@@ -4,10 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { ProtectedRoute } from '@/lib/components/ProtectedRoute';
 import { TeacherLayout } from '@/lib/components/TeacherLayout';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useTeacherLocale } from '@/lib/hooks/useTeacherLocale';
 import { PrivateSlot, PrivateBooking, AppUser } from '@/lib/types';
 import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
-import { toDate, formatDateJa, formatTime, formatDuration } from '@/lib/utils';
+import { toDate, formatTime } from '@/lib/utils';
 import {
   CalendarDays, Clock, CheckCircle2, AlertTriangle, User, ChevronRight,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import Link from 'next/link';
 
 export default function TeacherDashboardPage() {
   const { user } = useAuth();
+  const { t, formatDate, formatDuration } = useTeacherLocale();
   const [slots, setSlots] = useState<PrivateSlot[]>([]);
   const [bookings, setBookings] = useState<PrivateBooking[]>([]);
   const [students, setStudents] = useState<AppUser[]>([]);
@@ -134,36 +136,36 @@ export default function TeacherDashboardPage() {
         <div className="space-y-6">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">
-              こんにちは、{user?.displayName || '先生'}
+              {t('dashboard.greeting', {
+                name: user?.displayName || t('dashboard.greetingFallback'),
+              })}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
-              {formatDateJa(now)}の概要
+              {t('dashboard.overviewFor', { date: formatDate(now) })}
             </p>
           </div>
 
-          {/* 統計 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard icon={<CalendarDays className="w-5 h-5" />} label="今日の授業" value={todaysLessons.length} color="blue" />
-            <StatCard icon={<Clock className="w-5 h-5" />} label="今週の予定" value={weekUpcoming} color="indigo" />
-            <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="今月完了" value={monthStats.completed} color="green" />
-            <StatCard icon={<AlertTriangle className="w-5 h-5" />} label="空きスロット" value={openSlots} color="orange" />
+            <StatCard icon={<CalendarDays className="w-5 h-5" />} label={t('dashboard.stat.today')} value={todaysLessons.length} color="blue" />
+            <StatCard icon={<Clock className="w-5 h-5" />} label={t('dashboard.stat.week')} value={weekUpcoming} color="indigo" />
+            <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label={t('dashboard.stat.completedMonth')} value={monthStats.completed} color="green" />
+            <StatCard icon={<AlertTriangle className="w-5 h-5" />} label={t('dashboard.stat.openSlots')} value={openSlots} color="orange" />
           </div>
 
-          {/* 今日の授業 */}
           <div className="bg-white border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">今日の授業</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{t('dashboard.todayLessons')}</h3>
               <Link
                 href="/teacher/schedule"
                 className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
               >
-                スケジュールを見る <ChevronRight className="w-4 h-4" />
+                {t('dashboard.viewSchedule')} <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
             {todaysLessons.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-gray-500">
                 <CalendarDays className="w-8 h-8 mb-2 text-gray-300" />
-                <p className="text-sm">今日の授業はありません</p>
+                <p className="text-sm">{t('dashboard.noLessonsToday')}</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-200">
@@ -183,7 +185,7 @@ export default function TeacherDashboardPage() {
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-gray-400" />
                             <p className="text-sm font-medium text-gray-900">
-                              {student?.displayName || '生徒不明'}
+                              {student?.displayName || t('dashboard.unknownStudent')}
                             </p>
                           </div>
                           <p className="text-xs text-gray-500">{student?.email}</p>
@@ -193,7 +195,7 @@ export default function TeacherDashboardPage() {
                         href="/teacher/messages"
                         className="px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-[6px] transition-colors min-h-[44px] flex items-center"
                       >
-                        メッセージ
+                        {t('dashboard.message')}
                       </Link>
                     </div>
                   );
@@ -202,21 +204,20 @@ export default function TeacherDashboardPage() {
             )}
           </div>
 
-          {/* 今月のサマリー */}
           <div className="bg-white border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">今月のサマリー</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('dashboard.thisMonth')}</h3>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
                 <p className="text-3xl font-bold text-gray-900">{monthStats.total}</p>
-                <p className="text-sm text-gray-500">総授業数</p>
+                <p className="text-sm text-gray-500">{t('dashboard.totalLessons')}</p>
               </div>
               <div>
                 <p className="text-3xl font-bold text-green-600">{monthStats.completed}</p>
-                <p className="text-sm text-gray-500">完了済み</p>
+                <p className="text-sm text-gray-500">{t('dashboard.completed')}</p>
               </div>
               <div>
                 <p className="text-3xl font-bold text-blue-600">{monthStats.upcoming}</p>
-                <p className="text-sm text-gray-500">予定</p>
+                <p className="text-sm text-gray-500">{t('dashboard.upcoming')}</p>
               </div>
             </div>
           </div>

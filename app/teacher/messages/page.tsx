@@ -10,7 +10,8 @@ import {
   doc, setDoc, addDoc, onSnapshot, updateDoc, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
-import { toDate, formatDateJa, formatTime, formatDuration } from '@/lib/utils';
+import { useTeacherLocale } from '@/lib/hooks/useTeacherLocale';
+import { toDate, formatTime } from '@/lib/utils';
 import {
   MessageSquare, Send, User, ArrowLeft, Search, X, Clock, CalendarDays, BookOpen,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ function getThreadId(uid1: string, uid2: string) {
 
 export default function TeacherMessagesPage() {
   const { user } = useAuth();
+  const { t } = useTeacherLocale();
   const [threads, setThreads] = useState<(MessageThread & { otherUser?: AppUser; lastMessage?: string })[]>([]);
   const [studentList, setStudentList] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,11 +161,11 @@ export default function TeacherMessagesPage() {
           <div className={`w-80 border-r border-gray-200 bg-white flex flex-col ${selectedThreadId ? 'hidden md:flex' : 'flex'}`}>
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-gray-900">メッセージ</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t('messages.title')}</h2>
                 <button
                   onClick={() => setShowNewChat(!showNewChat)}
                   className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                  title="新しいチャット"
+                  title={t('messages.newChat')}
                 >
                   <MessageSquare className="w-5 h-5" />
                 </button>
@@ -174,7 +176,7 @@ export default function TeacherMessagesPage() {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="生徒名で検索"
+                  placeholder={t('messages.searchPlaceholder')}
                   className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-[6px] text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                 />
                 {searchQuery && (
@@ -188,7 +190,7 @@ export default function TeacherMessagesPage() {
             <div className="flex-1 overflow-y-auto">
               {showNewChat ? (
                 <div>
-                  <p className="px-4 py-2 text-xs text-gray-500 font-medium border-b border-gray-100">生徒を選択してチャットを開始</p>
+                  <p className="px-4 py-2 text-xs text-gray-500 font-medium border-b border-gray-100">{t('messages.selectStudent')}</p>
                   {filteredStudents.map(student => (
                     <button
                       key={student.id}
@@ -199,7 +201,7 @@ export default function TeacherMessagesPage() {
                         <User className="w-5 h-5 text-gray-500" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{student.displayName || '名前未設定'}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">{student.displayName || t('messages.noName')}</p>
                         <p className="text-xs text-gray-500 truncate">{student.email}</p>
                       </div>
                     </button>
@@ -212,9 +214,9 @@ export default function TeacherMessagesPage() {
               ) : filteredThreads.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-gray-500">
                   <MessageSquare className="w-8 h-8 mb-2 text-gray-300" />
-                  <p className="text-sm">メッセージはありません</p>
+                  <p className="text-sm">{t('messages.noMessages')}</p>
                   <button onClick={() => setShowNewChat(true)} className="mt-2 text-sm text-blue-600 hover:text-blue-800">
-                    新しいチャットを開始
+                    {t('messages.startNewChat')}
                   </button>
                 </div>
               ) : (
@@ -237,7 +239,7 @@ export default function TeacherMessagesPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-gray-900 truncate">
-                          {thread.otherUser?.displayName || '不明'}
+                          {thread.otherUser?.displayName || t('messages.unknown')}
                         </p>
                         {thread.lastMessageAt && (
                           <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
@@ -245,7 +247,7 @@ export default function TeacherMessagesPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 truncate">{thread.lastMessage || 'メッセージなし'}</p>
+                      <p className="text-xs text-gray-500 truncate">{thread.lastMessage || t('messages.noPreview')}</p>
                     </div>
                   </button>
                 ))
@@ -267,8 +269,8 @@ export default function TeacherMessagesPage() {
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
                 <MessageSquare className="w-16 h-16 mb-4 text-gray-200" />
-                <p className="text-lg">チャットを選択してください</p>
-                <p className="text-sm mt-1">左側のリストから生徒を選択</p>
+                <p className="text-lg">{t('messages.selectChat')}</p>
+                <p className="text-sm mt-1">{t('messages.selectChatHint')}</p>
               </div>
             )}
           </div>
@@ -299,6 +301,7 @@ interface ChatAreaProps {
 }
 
 function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessageSent }: ChatAreaProps) {
+  const { t, formatDate, formatDuration } = useTeacherLocale();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -343,7 +346,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
               bookingId: b.id,
               slotId: slot.id,
               title: slot.title || null,
-              date: formatDateJa(start),
+              date: formatDate(start),
               time: formatTime(start),
               duration: dur,
             };
@@ -430,7 +433,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
   const groupedMessages = useMemo(() => {
     const groups: { date: string; msgs: Message[] }[] = [];
     messages.forEach(msg => {
-      const dateStr = formatDateJa(toDate(msg.createdAt));
+      const dateStr = formatDate(toDate(msg.createdAt));
       const last = groups[groups.length - 1];
       if (last && last.date === dateStr) {
         last.msgs.push(msg);
@@ -467,7 +470,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
           <User className="w-5 h-5 text-gray-500" />
         </div>
         <div>
-          <p className="text-sm font-medium text-gray-900">{student.displayName || '名前未設定'}</p>
+          <p className="text-sm font-medium text-gray-900">{student.displayName || t('messages.noName')}</p>
           <p className="text-xs text-gray-500">{student.email}</p>
         </div>
       </div>
@@ -477,7 +480,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <MessageSquare className="w-12 h-12 mb-2 text-gray-200" />
-            <p className="text-sm">メッセージを送信して会話を始めましょう</p>
+            <p className="text-sm">{t('messages.sendToStart')}</p>
           </div>
         )}
         {groupedMessages.map((group, gi) => (
@@ -511,7 +514,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
       {/* 授業ピッカー */}
       {showLessonPicker && lessons.length > 0 && (
         <div className="border-t border-gray-200 bg-white px-3 py-2 max-h-40 overflow-y-auto">
-          <p className="text-xs text-gray-500 mb-2 font-medium">授業を選択してメッセージに紐づけ</p>
+          <p className="text-xs text-gray-500 mb-2 font-medium">{t('messages.linkLesson')}</p>
           <div className="space-y-1">
             {lessons.map(lesson => (
               <button
@@ -523,7 +526,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
                 <span className="text-gray-900">
                   {lesson.title ? <span className="font-medium">{lesson.title}</span> : null}
                   {lesson.title ? ' — ' : ''}
-                  {lesson.date} {lesson.time}（{formatDuration(lesson.duration)}）
+                  {lesson.date} {lesson.time} ({formatDuration(lesson.duration)})
                 </span>
               </button>
             ))}
@@ -554,7 +557,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
                 ? 'bg-blue-100 text-blue-600'
                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
-            title="授業を紐づけ"
+            title={t('messages.linkLessonBtn')}
           >
             <BookOpen className="w-5 h-5" />
           </button>
@@ -562,7 +565,7 @@ function ChatArea({ threadId, student, currentUserId, teacherId, onBack, onMessa
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="メッセージを入力..."
+            placeholder={t('messages.typePlaceholder')}
             rows={1}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-[6px] text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] max-h-32"
           />

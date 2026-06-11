@@ -126,6 +126,11 @@ export function getDayName(date: Date): string {
   return days[date.getDay()];
 }
 
+/** Teacher UI: English weekday abbreviation (e.g. "Mon") */
+export function getDayNameEn(date: Date): string {
+  return date.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
 /**
  * 時間範囲が重複しているかチェック
  */
@@ -148,6 +153,31 @@ export function formatDuration(minutes: number): string {
   if (hours === 0) return `${mins}分`;
   if (mins === 0) return `${hours}時間`;
   return `${hours}時間${mins}分`;
+}
+
+/** Teacher UI: English date label (e.g. "Mon, Jun 11, 2026") */
+export function formatDateEn(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/** Teacher UI: English month header (e.g. "June 2026") */
+export function formatMonthEn(date: Date): string {
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+}
+
+/** Teacher UI: English duration (e.g. "1 hr 30 min") */
+export function formatDurationEn(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins} min`;
+  if (mins === 0) return `${hours} hr`;
+  return `${hours} hr ${mins} min`;
 }
 
 /**

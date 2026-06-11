@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ProtectedRoute } from '@/lib/components/ProtectedRoute';
 import { TeacherLayout } from '@/lib/components/TeacherLayout';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useTeacherLocale } from '@/lib/hooks/useTeacherLocale';
 import { PrivateSlot, PrivateBooking, AppUser, BookingStatus } from '@/lib/types';
 import {
   collection, getDocs, getDoc, query, where, Timestamp,
@@ -20,8 +21,7 @@ import {
 import { SlotWeekColorPresetStrip } from '@/lib/components/SlotWeekColorPresetStrip';
 import { db } from '@/lib/firebase/client';
 import {
-  toDate, formatDateJa, formatTime, formatDuration,
-  formatDate, getWeekDates, getWeekRangeBounds, getDayName, calculateOverlapLayout,
+  toDate, formatTime, formatDate, getWeekDates, getWeekRangeBounds, calculateOverlapLayout,
   BOOKING_DURATION_STEP_MINUTES, generateMinuteStepOptions,
 } from '@/lib/utils';
 import {
@@ -95,6 +95,7 @@ function weekSlotColorsBase(
 
 export default function TeacherSchedulePage() {
   const { user } = useAuth();
+  const { t, formatDate: formatDateLocalized, formatMonth, getDayNameLocalized } = useTeacherLocale();
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -153,11 +154,11 @@ export default function TeacherSchedulePage() {
         },
         { merge: true },
       );
-      setWeekColorsMessage('色の設定を保存しました');
+      setWeekColorsMessage(t('schedule.colorsSaved'));
       setTimeout(() => setWeekColorsMessage(''), 4000);
     } catch (e) {
       console.error(e);
-      setWeekColorsMessage('保存に失敗しました');
+      setWeekColorsMessage(t('schedule.colorsSaveFailed'));
     } finally {
       setSavingWeekColors(false);
     }
@@ -165,7 +166,7 @@ export default function TeacherSchedulePage() {
 
   const handleResetWeekColors = () => {
     setScheduleWeekColors({ ...DEFAULT_SCHEDULE_WEEK_COLORS });
-    setWeekColorsMessage('デフォルトに戻しました（保存で反映）');
+    setWeekColorsMessage(t('schedule.colorsResetHint'));
     setTimeout(() => setWeekColorsMessage(''), 4000);
   };
 
@@ -218,8 +219,8 @@ export default function TeacherSchedulePage() {
 
       const allSlots = slotsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateSlot));
       const filteredSlots = allSlots.filter(s => {
-        const t = toDate(s.startAt).getTime();
-        return t >= startMs && t <= endMs;
+        const slotTime = toDate(s.startAt).getTime();
+        return slotTime >= startMs && slotTime <= endMs;
       });
 
       setSlots(filteredSlots);
@@ -227,13 +228,13 @@ export default function TeacherSchedulePage() {
       setStudentList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
     } catch (error) {
       console.error('Error loading schedule:', error);
-      const msg = error instanceof Error ? error.message : 'データの読み込みに失敗しました';
+      const msg = error instanceof Error ? error.message : t('schedule.loadDataFailed');
       setScheduleLoadError(msg);
       setSlots([]);
     } finally {
       setLoading(false);
     }
-  }, [user, viewMode, currentWeek, currentMonth]);
+  }, [user, viewMode, currentWeek, currentMonth, t]);
 
   useEffect(() => { if (user) loadData(); }, [user, loadData]);
 
@@ -275,24 +276,24 @@ export default function TeacherSchedulePage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">マイスケジュール</h2>
-              <p className="mt-1 text-sm text-gray-600">自分の空き枠と予約を管理</p>
+              <h2 className="text-3xl font-bold text-gray-900">{t('schedule.title')}</h2>
+              <p className="mt-1 text-sm text-gray-600">{t('schedule.subtitle')}</p>
             </div>
             <button
               onClick={() => setShowAddModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-[6px] hover:bg-blue-700 transition-colors min-h-[44px] flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              空き枠を追加
+              {t('schedule.addOpenSlot')}
             </button>
           </div>
 
           {scheduleLoadError && (
             <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 rounded-[6px]" role="alert">
-              <p className="font-medium">スケジュールの読み込みに失敗しました</p>
+              <p className="font-medium">{t('schedule.loadFailed')}</p>
               <p className="mt-1 text-xs break-words">{scheduleLoadError}</p>
               <p className="mt-2 text-xs text-red-700">
-                Firestore の権限やネットワークを確認し、ページを再読み込みしてください。
+                {t('schedule.loadFailedHint')}
               </p>
             </div>
           )}
@@ -308,7 +309,7 @@ export default function TeacherSchedulePage() {
               }`}
             >
               <CalendarDays className="w-4 h-4" />
-              週表示
+              {t('schedule.view.week')}
             </button>
             <button
               onClick={() => setViewMode('month')}
@@ -319,7 +320,7 @@ export default function TeacherSchedulePage() {
               }`}
             >
               <Calendar className="w-4 h-4" />
-              月表示
+              {t('schedule.view.month')}
             </button>
             <button
               onClick={() => setViewMode('list')}
@@ -330,7 +331,7 @@ export default function TeacherSchedulePage() {
               }`}
             >
               <List className="w-4 h-4" />
-              一覧
+              {t('schedule.view.list')}
             </button>
           </div>
 
@@ -340,15 +341,15 @@ export default function TeacherSchedulePage() {
               <>
                 <div className="w-10" />
                 <div className="text-center flex-1 px-2">
-                  <span className="text-lg font-semibold text-gray-900">今後の枠（約8週間）</span>
-                  <p className="text-xs text-gray-500 mt-1">今日から8週間先までの空き枠・予約を時系列で確認・編集できます</p>
+                  <span className="text-lg font-semibold text-gray-900">{t('schedule.upcomingTitle')}</span>
+                  <p className="text-xs text-gray-500 mt-1">{t('schedule.upcomingHint')}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => loadData()}
                   className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-[6px] transition-colors min-h-[44px] whitespace-nowrap"
                 >
-                  再読込
+                  {t('schedule.reload')}
                 </button>
               </>
             ) : (
@@ -372,8 +373,8 @@ export default function TeacherSchedulePage() {
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-semibold text-gray-900">
                     {viewMode === 'week'
-                      ? `${formatDateJa(weekDates[0])} - ${formatDateJa(weekDates[6])}`
-                      : `${currentMonth.getFullYear()}年${currentMonth.getMonth() + 1}月`}
+                      ? `${formatDateLocalized(weekDates[0])} - ${formatDateLocalized(weekDates[6])}`
+                      : formatMonth(currentMonth)}
                   </span>
                   <button
                     onClick={() => {
@@ -382,7 +383,7 @@ export default function TeacherSchedulePage() {
                     }}
                     className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-[6px] transition-colors min-h-[44px]"
                   >
-                    {viewMode === 'week' ? '今週' : '今月'}
+                    {viewMode === 'week' ? t('schedule.thisWeek') : t('schedule.thisMonth')}
                   </button>
                 </div>
                 <button
@@ -412,21 +413,21 @@ export default function TeacherSchedulePage() {
                 className="w-4 h-4 rounded-[4px] shrink-0 border border-gray-400"
                 style={weekSlotColorsBase('open', scheduleWeekColors)}
               />
-              空き
+              {t('status.open')}
             </span>
             <span className="flex items-center gap-2">
               <span
                 className="w-4 h-4 rounded-[4px] shrink-0 border border-gray-400"
                 style={weekSlotColorsBase('booked', scheduleWeekColors)}
               />
-              予約済み
+              {t('status.booked')}
             </span>
             <span className="flex items-center gap-2">
               <span
                 className="w-4 h-4 rounded-[4px] shrink-0 border border-gray-400"
                 style={weekSlotColorsBase('closed', scheduleWeekColors)}
               />
-              閉鎖
+              {t('status.closed')}
             </span>
           </div>
 
@@ -439,27 +440,27 @@ export default function TeacherSchedulePage() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-50 border border-gray-300 rounded-[6px] hover:bg-gray-100 min-h-[44px]"
               >
                 <Palette className="w-4 h-4" />
-                {showWeekColorPanel ? '色設定を閉じる' : '週表示の色を自分で設定'}
+                {showWeekColorPanel ? t('schedule.closeColorPanel') : t('schedule.openColorPanel')}
               </button>
               {showWeekColorPanel && (
                 <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
                   <p className="text-xs text-gray-600">
-                    空き枠・予約済み・閉鎖それぞれについて、背景色と文字色を選べます。保存するとこのアカウントで同期されます。
+                    {t('schedule.weekColorsHint')}
                   </p>
                   {(
                     [
-                      { label: '空き枠', bgKey: 'scheduleWeekOpenBg' as const, textKey: 'scheduleWeekOpenText' as const },
-                      { label: '予約済み', bgKey: 'scheduleWeekBookedBg' as const, textKey: 'scheduleWeekBookedText' as const },
-                      { label: '閉鎖', bgKey: 'scheduleWeekClosedBg' as const, textKey: 'scheduleWeekClosedText' as const },
+                      { statusKey: 'status.open' as const, bgKey: 'scheduleWeekOpenBg' as const, textKey: 'scheduleWeekOpenText' as const },
+                      { statusKey: 'status.booked' as const, bgKey: 'scheduleWeekBookedBg' as const, textKey: 'scheduleWeekBookedText' as const },
+                      { statusKey: 'status.closed' as const, bgKey: 'scheduleWeekClosedBg' as const, textKey: 'scheduleWeekClosedText' as const },
                     ] as const
                   ).map(row => (
                     <div
-                      key={row.label}
+                      key={row.statusKey}
                       className="grid grid-cols-1 sm:grid-cols-[100px_1fr_1fr] gap-3 items-center"
                     >
-                      <span className="text-sm font-medium text-gray-900">{row.label}</span>
+                      <span className="text-sm font-medium text-gray-900">{t(row.statusKey)}</span>
                       <label className="flex flex-col gap-1 text-xs text-gray-600">
-                        背景
+                        {t('schedule.background')}
                         <input
                           type="color"
                           value={scheduleWeekColors[row.bgKey]}
@@ -470,7 +471,7 @@ export default function TeacherSchedulePage() {
                         />
                       </label>
                       <label className="flex flex-col gap-1 text-xs text-gray-600">
-                        文字
+                        {t('schedule.textColor')}
                         <input
                           type="color"
                           value={scheduleWeekColors[row.textKey]}
@@ -488,7 +489,7 @@ export default function TeacherSchedulePage() {
                       onClick={handleResetWeekColors}
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-[6px] hover:bg-gray-200 min-h-[44px]"
                     >
-                      デフォルトに戻す
+                      {t('schedule.resetDefault')}
                     </button>
                     <button
                       type="button"
@@ -496,7 +497,7 @@ export default function TeacherSchedulePage() {
                       disabled={savingWeekColors}
                       className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-[6px] hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
                     >
-                      {savingWeekColors ? '保存中...' : '色を保存'}
+                      {savingWeekColors ? t('schedule.saving') : t('schedule.saveColors')}
                     </button>
                   </div>
                   {weekColorsMessage && (
@@ -518,19 +519,19 @@ export default function TeacherSchedulePage() {
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">日付</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">時間</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">状態</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700 min-w-[120px]">授業名</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700">生徒</th>
-                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">操作</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{t('schedule.col.date')}</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{t('schedule.col.time')}</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">{t('schedule.col.status')}</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700 min-w-[120px]">{t('schedule.col.lessonTitle')}</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700">{t('schedule.col.student')}</th>
+                      <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{t('schedule.col.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {slotsSortedByStart.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
-                          この期間に枠はありません。週表示・月表示から空き枠を追加できます。
+                          {t('schedule.noSlotsInPeriod')}
                         </td>
                       </tr>
                     ) : (
@@ -541,10 +542,10 @@ export default function TeacherSchedulePage() {
                         const effective = bk ? 'booked' : slot.status;
                         const stLabel =
                           effective === 'booked'
-                            ? '予約済み'
+                            ? t('status.booked')
                             : slot.status === 'closed'
-                              ? '閉鎖'
-                              : '空き';
+                              ? t('status.closed')
+                              : t('status.open');
                         const stClass =
                           effective === 'booked'
                             ? 'text-blue-700 bg-blue-50 border border-blue-200'
@@ -553,7 +554,7 @@ export default function TeacherSchedulePage() {
                               : 'text-green-700 bg-green-50 border border-green-200';
                         return (
                           <tr key={slot.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{formatDateJa(st)}</td>
+                            <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{formatDateLocalized(st)}</td>
                             <td className="px-4 py-3 text-gray-900 whitespace-nowrap">
                               {formatTime(st)} - {formatTime(en)}
                             </td>
@@ -573,7 +574,7 @@ export default function TeacherSchedulePage() {
                                 className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-[6px] hover:bg-blue-100 min-h-[44px]"
                               >
                                 <Eye className="w-4 h-4" />
-                                確認・編集
+                                {t('schedule.viewEdit')}
                               </button>
                             </td>
                           </tr>
@@ -605,7 +606,7 @@ export default function TeacherSchedulePage() {
                       const isToday = formatDate(date) === formatDate(new Date());
                       return (
                         <div key={i} className={`p-2 text-center border-r border-gray-200 last:border-r-0 ${isToday ? 'bg-blue-50' : ''}`}>
-                          <p className="text-xs text-gray-500">{getDayName(date)}</p>
+                          <p className="text-xs text-gray-500">{getDayNameLocalized(date)}</p>
                           <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
                             {date.getDate()}
                           </p>
@@ -692,7 +693,7 @@ export default function TeacherSchedulePage() {
                                 )}
                                 {booking && height > 44 && (
                                   <span className="block truncate opacity-80">
-                                    {studentMap[booking.studentId]?.displayName || '生徒'}
+                                    {studentMap[booking.studentId]?.displayName || t('schedule.detail.student')}
                                   </span>
                                 )}
                               </button>
@@ -739,6 +740,7 @@ interface AddSlotModalProps {
 }
 
 function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
+  const { t, formatDuration } = useTeacherLocale();
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(formatDate(new Date()));
   const [startHour, setStartHour] = useState(10);
@@ -762,15 +764,15 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
     setError('');
 
     if (totalDuration <= 0) {
-      setError('空き枠の時間を1分以上に設定してください。');
+      setError(t('schedule.error.durationMin'));
       return;
     }
     if (totalDuration % BOOKING_DURATION_STEP_MINUTES !== 0) {
-      setError(`空き枠の時間は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
+      setError(t('schedule.error.durationStep', { step: BOOKING_DURATION_STEP_MINUTES }));
       return;
     }
     if (startMinute % BOOKING_DURATION_STEP_MINUTES !== 0) {
-      setError(`開始時刻は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください。`);
+      setError(t('schedule.error.startStep', { step: BOOKING_DURATION_STEP_MINUTES }));
       return;
     }
 
@@ -811,7 +813,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
     } catch (err: unknown) {
       console.error('Error creating slot:', err);
       const firebaseErr = err as { code?: string; message?: string };
-      setError(`作成に失敗しました: ${firebaseErr.code || firebaseErr.message || '不明なエラー'}`);
+      setError(t('schedule.error.createFailed', { detail: firebaseErr.code || firebaseErr.message || 'Unknown error' }));
     } finally {
       setSubmitting(false);
     }
@@ -821,7 +823,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="bg-white rounded-none border border-gray-200 w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900">空き枠を追加</h3>
+          <h3 className="text-lg font-bold text-gray-900">{t('schedule.addModal.title')}</h3>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center">
             <X className="w-5 h-5" />
           </button>
@@ -829,24 +831,24 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">授業名</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('schedule.addModal.lessonTitle')}</label>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="例：英会話レッスン、IELTS対策"
+              placeholder={t('schedule.addModal.lessonTitlePh')}
               className="w-full px-3 py-2 border border-gray-300 rounded-[6px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">日付</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('schedule.addModal.date')}</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-[6px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">開始時間</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('schedule.addModal.startTime')}</label>
             <div className="grid grid-cols-2 gap-3">
               <div className="min-w-0">
-                <span className="block text-xs text-gray-500 mb-1">時</span>
+                <span className="block text-xs text-gray-500 mb-1">{t('schedule.addModal.hour')}</span>
                 <select
                   value={String(startHour)}
                   onChange={e => setStartHour(Number(e.target.value))}
@@ -858,7 +860,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
                 </select>
               </div>
               <div className="min-w-0">
-                <span className="block text-xs text-gray-500 mb-1">分</span>
+                <span className="block text-xs text-gray-500 mb-1">{t('schedule.addModal.minute')}</span>
                 <select
                   value={String(startMinute)}
                   onChange={e => setStartMinute(Number(e.target.value))}
@@ -872,10 +874,10 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">空き枠の長さ</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('schedule.addModal.duration')}</label>
             <div className="grid grid-cols-2 gap-3">
               <div className="min-w-0">
-                <span className="block text-xs text-gray-500 mb-1">時間</span>
+                <span className="block text-xs text-gray-500 mb-1">{t('schedule.addModal.hours')}</span>
                 <select
                   value={String(durationHour)}
                   onChange={e => setDurationHour(Number(e.target.value))}
@@ -887,7 +889,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
                 </select>
               </div>
               <div className="min-w-0">
-                <span className="block text-xs text-gray-500 mb-1">分</span>
+                <span className="block text-xs text-gray-500 mb-1">{t('schedule.addModal.minute')}</span>
                 <select
                   value={String(durationMinute)}
                   onChange={e => setDurationMinute(Number(e.target.value))}
@@ -900,7 +902,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
               </div>
             </div>
             {totalDuration > 0 && (
-              <p className="mt-1 text-xs text-gray-500">合計: {totalDuration}分</p>
+              <p className="mt-1 text-xs text-gray-500">{t('schedule.addModal.total', { duration: formatDuration(totalDuration) })}</p>
             )}
           </div>
 
@@ -914,14 +916,14 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
               onClick={onClose}
               className="flex-1 py-3 px-4 text-sm font-medium rounded-[6px] text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors min-h-[44px]"
             >
-              キャンセル
+              {t('schedule.addModal.cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="flex-1 py-3 bg-blue-600 text-white font-medium rounded-[6px] hover:bg-blue-700 transition-colors disabled:opacity-50 min-h-[44px]"
             >
-              {submitting ? '作成中...' : '空き枠を作成'}
+              {submitting ? t('schedule.addModal.creating') : t('schedule.addModal.create')}
             </button>
           </div>
         </form>
@@ -941,6 +943,7 @@ interface SlotDetailModalProps {
 }
 
 function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDetailModalProps) {
+  const { t, formatDate: formatDateLocalized, formatDuration } = useTeacherLocale();
   const [processing, setProcessing] = useState(false);
   const [editingSlot, setEditingSlot] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -984,7 +987,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
 
   const handleComplete = async () => {
     if (!db || !booking) return;
-    if (!confirm('この授業を「完了」にしますか？')) return;
+    if (!confirm(t('schedule.detail.confirmComplete'))) return;
     setProcessing(true);
     try {
       await updateDoc(doc(db, 'privateBookings', booking.id), {
@@ -995,13 +998,13 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
         updatedAt: Timestamp.now(),
       });
       onRefresh(); onClose();
-    } catch (e) { console.error(e); alert('更新に失敗しました'); }
+    } catch (e) { console.error(e); alert(t('schedule.detail.updateFailed')); }
     finally { setProcessing(false); }
   };
 
   const handleNoShow = async () => {
     if (!db || !booking) return;
-    if (!confirm('ノーショーとして記録しますか？回数は消化されます。')) return;
+    if (!confirm(t('schedule.detail.confirmNoShow'))) return;
     setProcessing(true);
     try {
       await updateDoc(doc(db, 'privateBookings', booking.id), {
@@ -1012,26 +1015,26 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
         updatedAt: Timestamp.now(),
       });
       onRefresh(); onClose();
-    } catch (e) { console.error(e); alert('更新に失敗しました'); }
+    } catch (e) { console.error(e); alert(t('schedule.detail.updateFailed')); }
     finally { setProcessing(false); }
   };
 
   const handleDeleteSlot = async () => {
     if (!db) return;
-    if (booking) { alert('予約済みのスロットは削除できません'); return; }
-    if (!confirm('この空き枠を削除しますか？')) return;
+    if (booking) { alert(t('schedule.detail.cannotDeleteBooked')); return; }
+    if (!confirm(t('schedule.detail.confirmDelete'))) return;
     setProcessing(true);
     try {
       await deleteDoc(doc(db, 'privateSlots', slot.id));
       onRefresh(); onClose();
-    } catch (e) { console.error(e); alert('削除に失敗しました'); }
+    } catch (e) { console.error(e); alert(t('schedule.detail.deleteFailed')); }
     finally { setProcessing(false); }
   };
 
   const handleCloseSlot = async () => {
     if (!db || booking) return;
     if (slot.status !== 'open') return;
-    if (!confirm('この枠を閉鎖しますか？生徒は予約できなくなります。')) return;
+    if (!confirm(t('schedule.detail.confirmClose'))) return;
     setProcessing(true);
     try {
       await updateDoc(doc(db, 'privateSlots', slot.id), {
@@ -1042,7 +1045,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
       onClose();
     } catch (e) {
       console.error(e);
-      alert('閉鎖に失敗しました');
+      alert(t('schedule.detail.closeFailed'));
     } finally {
       setProcessing(false);
     }
@@ -1051,7 +1054,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
   const handleReopenSlot = async () => {
     if (!db || booking) return;
     if (slot.status !== 'closed') return;
-    if (!confirm('閉鎖を解除し、再び空き枠として公開しますか？')) return;
+    if (!confirm(t('schedule.detail.confirmReopen'))) return;
     setProcessing(true);
     try {
       await updateDoc(doc(db, 'privateSlots', slot.id), {
@@ -1062,7 +1065,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
       onClose();
     } catch (e) {
       console.error(e);
-      alert('再開に失敗しました');
+      alert(t('schedule.detail.reopenFailed'));
     } finally {
       setProcessing(false);
     }
@@ -1073,15 +1076,15 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
     setEditError('');
     const totalMin = editDurH * 60 + editDurM;
     if (totalMin <= 0) {
-      setEditError('枠の長さは1分以上にしてください');
+      setEditError(t('schedule.detail.editDurationMin'));
       return;
     }
     if (totalMin % BOOKING_DURATION_STEP_MINUTES !== 0) {
-      setEditError(`枠の長さは ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください`);
+      setEditError(t('schedule.detail.editDurationStep', { step: BOOKING_DURATION_STEP_MINUTES }));
       return;
     }
     if (editStartM % BOOKING_DURATION_STEP_MINUTES !== 0) {
-      setEditError(`開始時刻は ${BOOKING_DURATION_STEP_MINUTES} 分単位で設定してください`);
+      setEditError(t('schedule.detail.editStartStep', { step: BOOKING_DURATION_STEP_MINUTES }));
       return;
     }
     setProcessing(true);
@@ -1118,7 +1121,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
       onClose();
     } catch (e) {
       console.error(e);
-      setEditError('保存に失敗しました');
+      setEditError(t('schedule.detail.editSaveFailed'));
     } finally {
       setProcessing(false);
     }
@@ -1128,7 +1131,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="bg-white rounded-none border border-gray-200 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">空き枠の確認・編集</h3>
+          <h3 className="text-lg font-bold text-gray-900">{t('schedule.detail.title')}</h3>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center">
             <X className="w-5 h-5" />
           </button>
@@ -1139,21 +1142,21 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
           <div>
             {booking ? (
               <span className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
-                <User className="w-4 h-4" /> 予約済み
+                <User className="w-4 h-4" /> {t('status.booked')}
               </span>
             ) : (
               <span className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-full ${statusColors[slot.status].bg} ${statusColors[slot.status].text}`}>
-                <Clock className="w-4 h-4" /> {slot.status === 'open' ? '空き' : '閉鎖'}
+                <Clock className="w-4 h-4" /> {slot.status === 'open' ? t('status.open') : t('status.closed')}
               </span>
             )}
             {booking && booking.status === 'completed' && (
               <span className="ml-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-full bg-green-100 text-green-800">
-                <CheckCircle2 className="w-4 h-4" /> 完了
+                <CheckCircle2 className="w-4 h-4" /> {t('status.completed')}
               </span>
             )}
             {booking && booking.status === 'no_show_consumed' && (
               <span className="ml-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-full bg-orange-100 text-orange-800">
-                <AlertTriangle className="w-4 h-4" /> ノーショー
+                <AlertTriangle className="w-4 h-4" /> {t('status.noShow')}
               </span>
             )}
           </div>
@@ -1161,25 +1164,25 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
           {/* 日時（閲覧） */}
           {!editingSlot && (
             <div className="border border-gray-200 p-4">
-              <p className="text-sm font-medium text-gray-900">{formatDateJa(start)}</p>
-              <p className="text-sm text-gray-600">{formatTime(start)} - {formatTime(end)}（{formatDuration(dur)}）</p>
+              <p className="text-sm font-medium text-gray-900">{formatDateLocalized(start)}</p>
+              <p className="text-sm text-gray-600">{formatTime(start)} - {formatTime(end)} ({formatDuration(dur)})</p>
             </div>
           )}
 
           {booking && booking.status === 'booked' && (
             <div className="border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-              予約が入っているため、日時の変更・枠の削除はできません。予約の取り消しが必要な場合は管理者へご相談ください。
+              {t('schedule.detail.bookedLocked')}
             </div>
           )}
 
           {/* 生徒情報 */}
           {booking && student && (
             <div className="border border-gray-200 p-4">
-              <p className="text-xs text-gray-500 mb-1">生徒</p>
+              <p className="text-xs text-gray-500 mb-1">{t('schedule.detail.student')}</p>
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-gray-400" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{student.displayName || '不明'}</p>
+                  <p className="text-sm font-medium text-gray-900">{student.displayName || t('messages.unknown')}</p>
                   <p className="text-xs text-gray-500">{student.email}</p>
                 </div>
               </div>
@@ -1189,13 +1192,13 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
           {/* アクション: 授業ステータス */}
           {booking && booking.status === 'booked' && (
             <div className="space-y-3 pt-2">
-              <p className="text-xs text-gray-500 font-medium">授業ステータスの変更</p>
+              <p className="text-xs text-gray-500 font-medium">{t('schedule.detail.updateStatus')}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={handleComplete} disabled={processing} className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white text-sm font-medium rounded-[6px] hover:bg-green-700 transition-colors disabled:opacity-50 min-h-[44px]">
-                  <CheckCircle2 className="w-4 h-4" /> 完了
+                  <CheckCircle2 className="w-4 h-4" /> {t('status.completed')}
                 </button>
                 <button onClick={handleNoShow} disabled={processing} className="flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white text-sm font-medium rounded-[6px] hover:bg-orange-700 transition-colors disabled:opacity-50 min-h-[44px]">
-                  <AlertTriangle className="w-4 h-4" /> ノーショー
+                  <AlertTriangle className="w-4 h-4" /> {t('status.noShow')}
                 </button>
               </div>
             </div>
@@ -1205,7 +1208,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
           {canEditSlotFields && (
             <div className="border border-gray-200 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">日時・授業名の編集</p>
+                <p className="text-sm font-medium text-gray-900">{t('schedule.detail.editSection')}</p>
                 {!editingSlot && (
                   <button
                     type="button"
@@ -1213,24 +1216,24 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                     className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-[6px] hover:bg-blue-100 min-h-[44px]"
                   >
                     <Pencil className="w-4 h-4" />
-                    編集する
+                    {t('schedule.detail.edit')}
                   </button>
                 )}
               </div>
               {editingSlot && (
                 <div className="space-y-3 pt-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">授業名（任意）</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.detail.lessonTitleOptional')}</label>
                     <input
                       type="text"
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-[6px] text-gray-900 min-h-[44px]"
-                      placeholder="例：英会話レッスン"
+                      placeholder={t('schedule.detail.lessonTitlePh')}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">日付</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.addModal.date')}</label>
                     <input
                       type="date"
                       value={editDate}
@@ -1239,40 +1242,40 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">開始</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.detail.start')}</label>
                     <div className="grid grid-cols-2 gap-2">
                       <select
                         value={String(editStartH)}
                         onChange={e => setEditStartH(Number(e.target.value))}
                         className="min-w-0 w-full px-2 py-2 border border-gray-300 rounded-[6px] min-h-[44px]"
                       >
-                        {hourOptions.map(h => <option key={h} value={String(h)}>{h}時</option>)}
+                        {hourOptions.map(h => <option key={h} value={String(h)}>{t('schedule.detail.hourSuffix', { h })}</option>)}
                       </select>
                       <select
                         value={String(editStartM)}
                         onChange={e => setEditStartM(Number(e.target.value))}
                         className="min-w-0 w-full px-2 py-2 border border-gray-300 rounded-[6px] min-h-[44px]"
                       >
-                        {minuteOptions.map(m => <option key={m} value={String(m)}>{m.toString().padStart(2, '0')}分</option>)}
+                        {minuteOptions.map(m => <option key={m} value={String(m)}>{t('schedule.detail.minSuffix', { m: m.toString().padStart(2, '0') })}</option>)}
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">枠の長さ</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.detail.slotDuration')}</label>
                     <div className="grid grid-cols-2 gap-2">
                       <select
                         value={String(editDurH)}
                         onChange={e => setEditDurH(Number(e.target.value))}
                         className="min-w-0 w-full px-2 py-2 border border-gray-300 rounded-[6px] min-h-[44px]"
                       >
-                        {durHourOptions.map(h => <option key={h} value={String(h)}>{h}時間</option>)}
+                        {durHourOptions.map(h => <option key={h} value={String(h)}>{t('schedule.detail.durHourSuffix', { h })}</option>)}
                       </select>
                       <select
                         value={String(editDurM)}
                         onChange={e => setEditDurM(Number(e.target.value))}
                         className="min-w-0 w-full px-2 py-2 border border-gray-300 rounded-[6px] min-h-[44px]"
                       >
-                        {durMinuteOptions.map(m => <option key={m} value={String(m)}>{m.toString().padStart(2, '0')}分</option>)}
+                        {durMinuteOptions.map(m => <option key={m} value={String(m)}>{t('schedule.detail.minSuffix', { m: m.toString().padStart(2, '0') })}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1284,7 +1287,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                   {editColorPresetId === 'custom' && (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">背景色</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.detail.bgColor')}</label>
                         <input
                           type="color"
                           value={editCustomBg}
@@ -1293,7 +1296,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">文字色</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('schedule.detail.textColorLabel')}</label>
                         <input
                           type="color"
                           value={editCustomText}
@@ -1310,7 +1313,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                       onClick={() => { setEditingSlot(false); setEditError(''); }}
                       className="flex-1 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-[6px] hover:bg-gray-200 min-h-[44px]"
                     >
-                      キャンセル
+                      {t('schedule.addModal.cancel')}
                     </button>
                     <button
                       type="button"
@@ -1318,7 +1321,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                       disabled={processing}
                       className="flex-1 py-2 text-sm font-medium text-white bg-blue-600 rounded-[6px] hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
                     >
-                      {processing ? '保存中...' : '保存'}
+                      {processing ? t('schedule.saving') : t('schedule.detail.save')}
                     </button>
                   </div>
                 </div>
@@ -1337,7 +1340,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-[6px] hover:bg-gray-200 disabled:opacity-50 min-h-[44px]"
                 >
                   <Lock className="w-4 h-4" />
-                  この枠を閉鎖する（予約不可）
+                  {t('schedule.detail.closeSlot')}
                 </button>
               )}
               {slot.status === 'closed' && (
@@ -1348,7 +1351,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-green-800 bg-green-50 border border-green-200 rounded-[6px] hover:bg-green-100 disabled:opacity-50 min-h-[44px]"
                 >
                   <Unlock className="w-4 h-4" />
-                  閉鎖を解除して空きに戻す
+                  {t('schedule.detail.reopenSlot')}
                 </button>
               )}
               <button
@@ -1357,7 +1360,7 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
                 disabled={processing}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white text-sm font-medium rounded-[6px] hover:bg-red-700 transition-colors disabled:opacity-50 min-h-[44px]"
               >
-                <Trash2 className="w-4 h-4" /> 空き枠を削除
+                <Trash2 className="w-4 h-4" /> {t('schedule.detail.deleteSlot')}
               </button>
             </div>
           )}
@@ -1382,7 +1385,7 @@ interface TeacherMonthViewProps {
 }
 
 function TeacherMonthView({ monthDays, slots, bookings, studentMap, getSlotsForDate, getBookingForSlot, onSlotClick }: TeacherMonthViewProps) {
-  const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
+  const { t, weekDays } = useTeacherLocale();
   const today = formatDate(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -1486,7 +1489,7 @@ function TeacherMonthView({ monthDays, slots, bookings, studentMap, getSlotsForD
                     );
                   })}
                 {daySlots.length > 4 && (
-                  <span className="text-gray-400 text-center">+{daySlots.length - 4}件</span>
+                  <span className="text-gray-400 text-center">{t('schedule.more', { count: daySlots.length - 4 })}</span>
                 )}
                 {daySlots.length === 0 && (
                   <span className="text-gray-300 text-center mt-auto">-</span>
@@ -1501,15 +1504,15 @@ function TeacherMonthView({ monthDays, slots, bookings, studentMap, getSlotsForD
       <div className="mt-4 flex items-center gap-4 text-xs text-gray-600">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span>予約済み</span>
+          <span>{t('status.booked')}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span>空き</span>
+          <span>{t('status.open')}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded-full bg-gray-400" />
-          <span>閉鎖</span>
+          <span>{t('status.closed')}</span>
         </div>
       </div>
 
@@ -1542,7 +1545,7 @@ interface TeacherDayDetailModalProps {
 }
 
 function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, onSlotClick, onClose }: TeacherDayDetailModalProps) {
-  const dayOfWeek = getDayName(date);
+  const { t, formatDate: formatDateLocalized, formatDuration } = useTeacherLocale();
   const sortedSlots = [...daySlots].sort((a, b) =>
     toDate(a.startAt).getTime() - toDate(b.startAt).getTime()
   );
@@ -1566,18 +1569,18 @@ function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, 
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div>
             <h3 className="text-lg font-bold text-gray-900">
-              {date.getMonth() + 1}月{date.getDate()}日（{dayOfWeek}）
+              {formatDateLocalized(date)}
             </h3>
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                予約 {bookedCount}件
+                {t('schedule.day.bookedCount', { count: bookedCount })}
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                空き {openCount}件
+                {t('schedule.day.openCount', { count: openCount })}
               </span>
-              <span>合計 {sortedSlots.length}件</span>
+              <span>{t('schedule.day.totalCount', { count: sortedSlots.length })}</span>
             </div>
           </div>
           <button
@@ -1593,7 +1596,7 @@ function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, 
           {sortedSlots.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">この日の予定はありません</p>
+              <p className="text-sm">{t('schedule.day.noSlots')}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1609,19 +1612,23 @@ function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, 
                 let borderColor: string;
 
                 if (booking && (booking.status === 'cancelled_consumed' || booking.status === 'rescheduled')) {
-                  statusLabel = booking.status === 'rescheduled' ? '振替済' : 'キャンセル';
+                  statusLabel = booking.status === 'rescheduled' ? t('status.rescheduled') : t('status.cancelled');
                   statusColor = 'text-orange-700 bg-orange-50';
                   borderColor = 'border-orange-200';
                 } else if (booking) {
-                  statusLabel = booking.status === 'completed' ? '完了' : booking.status === 'no_show_consumed' ? '欠席' : '予約済み';
+                  statusLabel = booking.status === 'completed'
+                    ? t('status.completed')
+                    : booking.status === 'no_show_consumed'
+                      ? t('status.noShow')
+                      : t('status.booked');
                   statusColor = booking.status === 'completed' ? 'text-gray-600 bg-gray-100' : 'text-blue-700 bg-blue-50';
                   borderColor = booking.status === 'completed' ? 'border-gray-200' : 'border-blue-200';
                 } else if (slot.status === 'open') {
-                  statusLabel = '空き';
+                  statusLabel = t('status.open');
                   statusColor = 'text-green-700 bg-green-50';
                   borderColor = 'border-green-200';
                 } else {
-                  statusLabel = '閉鎖';
+                  statusLabel = t('status.closed');
                   statusColor = 'text-gray-600 bg-gray-100';
                   borderColor = 'border-gray-200';
                 }
@@ -1638,7 +1645,7 @@ function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, 
                           <span className="text-sm font-bold text-gray-900">
                             {formatTime(start)} - {formatTime(end)}
                           </span>
-                          <span className="text-xs text-gray-400">{durationMin}分</span>
+                          <span className="text-xs text-gray-400">{formatDuration(durationMin)}</span>
                         </div>
                         {slot.title && (
                           <p className="text-xs text-gray-600 mb-1">{slot.title}</p>
@@ -1667,7 +1674,7 @@ function TeacherDayDetailModal({ date, daySlots, studentMap, getBookingForSlot, 
             onClick={onClose}
             className="w-full py-2 text-sm font-medium rounded-[6px] text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors min-h-[44px]"
           >
-            閉じる
+            {t('schedule.day.close')}
           </button>
         </div>
       </div>
