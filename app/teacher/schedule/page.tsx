@@ -9,7 +9,7 @@ import { useTeacherLocale } from '@/lib/hooks/useTeacherLocale';
 import { PrivateSlot, PrivateBooking, AppUser, BookingStatus } from '@/lib/types';
 import {
   collection, getDocs, getDoc, query, where, Timestamp,
-  doc, setDoc, updateDoc, deleteDoc, deleteField,
+  doc, setDoc, updateDoc,
 } from 'firebase/firestore';
 import {
   getSlotWeekColorPresetById,
@@ -19,6 +19,7 @@ import {
   monthSlotDotBackground,
 } from '@/lib/scheduleSlotStyle';
 import { SlotWeekColorPresetStrip } from '@/lib/components/SlotWeekColorPresetStrip';
+import { teacherApiFetch } from '@/lib/api/teacherApiFetch';
 import { db } from '@/lib/firebase/client';
 import {
   toDate, formatTime, formatDate, getWeekDates, getWeekRangeBounds, calculateOverlapLayout,
@@ -181,7 +182,7 @@ export default function TeacherSchedulePage() {
   }, [studentList]);
 
   const loadData = useCallback(async () => {
-    if (!db || !user) return;
+    if (!user) return;
     setLoading(true);
     setScheduleLoadError('');
     try {
@@ -196,7 +197,6 @@ export default function TeacherSchedulePage() {
         startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
         endDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
       } else {
-        // 一覧: 今日から約8週間先まで（後から確認・整理しやすい範囲）
         startDate = new Date();
         startDate.setHours(0, 0, 0, 0);
         endDate = new Date(startDate);
@@ -207,25 +207,45 @@ export default function TeacherSchedulePage() {
       const startMs = startDate.getTime();
       const endMs = endDate.getTime();
 
-      // teacherId のみで取得し、日付はクライアントで絞る（複合インデックス未作成でも動作する）
-      const [slotsSnap, bookingsSnap, usersSnap] = await Promise.all([
-        getDocs(query(collection(db, 'privateSlots'), where('teacherId', '==', user.uid))),
-        getDocs(query(
-          collection(db, 'privateBookings'),
-          where('teacherId', '==', user.uid),
-        )),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
-      ]);
+      let allSlots: PrivateSlot[] = [];
+      let allBookings: PrivateBooking[] = [];
+      let allStudents: AppUser[] = [];
 
-      const allSlots = slotsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateSlot));
+      // 本番環境: Admin SDK 経由 API（Firestore ルール非依存）
+      const apiRes = await teacherApiFetch(user, '/api/teacher/schedule');
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        allSlots = data.slots as PrivateSlot[];
+        allBookings = data.bookings as PrivateBooking[];
+        allStudents = data.students as AppUser[];
+      } else if (db) {
+        // フォールバック: クライアント Firestore 直接読取
+        const [slotsSnap, bookingsSnap, usersSnap] = await Promise.all([
+          getDocs(query(collection(db, 'privateSlots'), where('teacherId', '==', user.uid))),
+          getDocs(query(
+            collection(db, 'privateBookings'),
+            where('teacherId', '==', user.uid),
+          )),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+        ]);
+        allSlots = slotsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateSlot));
+        allBookings = bookingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateBooking));
+        allStudents = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser));
+      } else {
+        const errBody = await apiRes.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error || t('schedule.loadDataFailed'),
+        );
+      }
+
       const filteredSlots = allSlots.filter(s => {
         const slotTime = toDate(s.startAt).getTime();
         return slotTime >= startMs && slotTime <= endMs;
       });
 
       setSlots(filteredSlots);
-      setBookings(bookingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateBooking)));
-      setStudentList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+      setBookings(allBookings);
+      setStudentList(allStudents);
     } catch (error) {
       console.error('Error loading schedule:', error);
       const msg = error instanceof Error ? error.message : t('schedule.loadDataFailed');
@@ -740,6 +760,7 @@ interface AddSlotModalProps {
 }
 
 function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
+  const { user } = useAuth();
   const { t, formatDuration } = useTeacherLocale();
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(formatDate(new Date()));
@@ -760,7 +781,7 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db) return;
+    if (!user) return;
     setError('');
 
     if (totalDuration <= 0) {
@@ -794,21 +815,20 @@ function AddSlotModal({ teacherId, onClose, onSuccess }: AddSlotModalProps) {
           ? { weekCellBg: colorPreset.weekCellBg, weekCellText: colorPreset.weekCellText }
           : {};
 
-      const slotRef = doc(collection(db, 'privateSlots'));
-      await setDoc(slotRef, {
-        id: slotRef.id,
-        teacherId,
-        title: title.trim() || null,
-        startAt: Timestamp.fromDate(startDate),
-        endAt: Timestamp.fromDate(endDate),
-        status: 'open',
-        source: 'teacher_managed',
-        note: null,
-        weekKey,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        ...colorFields,
+      const res = await teacherApiFetch(user, '/api/teacher/slots', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: title.trim() || null,
+          startAt: startDate.toISOString(),
+          endAt: endDate.toISOString(),
+          weekKey,
+          ...colorFields,
+        }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Create failed');
+      }
       onSuccess();
     } catch (err: unknown) {
       console.error('Error creating slot:', err);
@@ -943,6 +963,7 @@ interface SlotDetailModalProps {
 }
 
 function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDetailModalProps) {
+  const { user } = useAuth();
   const { t, formatDate: formatDateLocalized, formatDuration } = useTeacherLocale();
   const [processing, setProcessing] = useState(false);
   const [editingSlot, setEditingSlot] = useState(false);
@@ -1020,59 +1041,74 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
   };
 
   const handleDeleteSlot = async () => {
-    if (!db) return;
+    if (!user) return;
     if (booking) { alert(t('schedule.detail.cannotDeleteBooked')); return; }
     if (!confirm(t('schedule.detail.confirmDelete'))) return;
     setProcessing(true);
     try {
-      await deleteDoc(doc(db, 'privateSlots', slot.id));
+      const res = await teacherApiFetch(user, `/api/teacher/slots/${slot.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Delete failed');
+      }
       onRefresh(); onClose();
-    } catch (e) { console.error(e); alert(t('schedule.detail.deleteFailed')); }
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : t('schedule.detail.deleteFailed'));
+    }
     finally { setProcessing(false); }
   };
 
   const handleCloseSlot = async () => {
-    if (!db || booking) return;
+    if (!user || booking) return;
     if (slot.status !== 'open') return;
     if (!confirm(t('schedule.detail.confirmClose'))) return;
     setProcessing(true);
     try {
-      await updateDoc(doc(db, 'privateSlots', slot.id), {
-        status: 'closed' as const,
-        updatedAt: Timestamp.now(),
+      const res = await teacherApiFetch(user, `/api/teacher/slots/${slot.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'closed' }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Close failed');
+      }
       onRefresh();
       onClose();
     } catch (e) {
       console.error(e);
-      alert(t('schedule.detail.closeFailed'));
+      alert(e instanceof Error ? e.message : t('schedule.detail.closeFailed'));
     } finally {
       setProcessing(false);
     }
   };
 
   const handleReopenSlot = async () => {
-    if (!db || booking) return;
+    if (!user || booking) return;
     if (slot.status !== 'closed') return;
     if (!confirm(t('schedule.detail.confirmReopen'))) return;
     setProcessing(true);
     try {
-      await updateDoc(doc(db, 'privateSlots', slot.id), {
-        status: 'open' as const,
-        updatedAt: Timestamp.now(),
+      const res = await teacherApiFetch(user, `/api/teacher/slots/${slot.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'open' }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Reopen failed');
+      }
       onRefresh();
       onClose();
     } catch (e) {
       console.error(e);
-      alert(t('schedule.detail.reopenFailed'));
+      alert(e instanceof Error ? e.message : t('schedule.detail.reopenFailed'));
     } finally {
       setProcessing(false);
     }
   };
 
   const handleSaveSlotEdit = async () => {
-    if (!db || !canEditSlotFields) return;
+    if (!user || !canEditSlotFields) return;
     setEditError('');
     const totalMin = editDurH * 60 + editDurM;
     if (totalMin <= 0) {
@@ -1094,28 +1130,31 @@ function SlotDetailModal({ slot, booking, student, onClose, onRefresh }: SlotDet
       const endDate = new Date(startDate.getTime() + totalMin * 60000);
 
       const preset = getSlotWeekColorPresetById(editColorPresetId);
-      let colorPayload: Record<string, unknown> = {
-        weekCellBg: deleteField(),
-        weekCellText: deleteField(),
-      };
+      let weekCellBg = '';
+      let weekCellText = '';
       if (editColorPresetId === 'custom') {
-        const bg = editCustomBg.trim();
-        const tx = editCustomText.trim();
-        if (bg && tx) {
-          colorPayload = { weekCellBg: bg, weekCellText: tx };
-        }
+        weekCellBg = editCustomBg.trim();
+        weekCellText = editCustomText.trim();
       } else if (preset?.weekCellBg && preset.weekCellText) {
-        colorPayload = { weekCellBg: preset.weekCellBg, weekCellText: preset.weekCellText };
+        weekCellBg = preset.weekCellBg;
+        weekCellText = preset.weekCellText;
       }
 
-      await updateDoc(doc(db, 'privateSlots', slot.id), {
-        title: editTitle.trim() || null,
-        startAt: Timestamp.fromDate(startDate),
-        endAt: Timestamp.fromDate(endDate),
-        weekKey: weekKeyFromStartDate(startDate),
-        updatedAt: Timestamp.now(),
-        ...colorPayload,
+      const res = await teacherApiFetch(user, `/api/teacher/slots/${slot.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: editTitle.trim() || null,
+          startAt: startDate.toISOString(),
+          endAt: endDate.toISOString(),
+          weekKey: weekKeyFromStartDate(startDate),
+          weekCellBg,
+          weekCellText,
+        }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Update failed');
+      }
       setEditingSlot(false);
       onRefresh();
       onClose();

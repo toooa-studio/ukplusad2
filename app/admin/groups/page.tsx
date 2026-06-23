@@ -56,8 +56,8 @@ export default function GroupsPage() {
   }, [teachers]);
 
   useEffect(() => {
-    loadAll();
-  }, []);
+    if (user) loadAll();
+  }, [user]);
 
   const loadAll = async () => {
     setLoading(true);

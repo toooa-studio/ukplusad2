@@ -29,31 +29,55 @@ export default function TeacherDashboardPage() {
   }, [students]);
 
   useEffect(() => {
-    if (!user?.uid || !db) return;
+    if (!user?.uid) return;
     loadData();
   }, [user?.uid]);
 
   const loadData = async () => {
-    if (!db || !user) return;
+    if (!user) return;
     setLoading(true);
     try {
-      const [slotsSnap, bookingsSnap, usersSnap] = await Promise.all([
-        getDocs(query(
-          collection(db, 'privateSlots'),
-          where('teacherId', '==', user.uid),
-        )),
-        getDocs(query(
-          collection(db, 'privateBookings'),
-          where('teacherId', '==', user.uid),
-        )),
-        getDocs(query(
-          collection(db, 'users'),
-          where('role', '==', 'student'),
-        )),
-      ]);
-      setSlots(slotsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateSlot)));
-      setBookings(bookingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateBooking)));
-      setStudents(usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+      let slotsData: PrivateSlot[] = [];
+      let bookingsData: PrivateBooking[] = [];
+      let studentsData: AppUser[] = [];
+
+      const idToken = await user.getIdToken();
+      const apiRes = await fetch('/api/teacher/schedule', {
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        slotsData = data.slots as PrivateSlot[];
+        bookingsData = data.bookings as PrivateBooking[];
+        studentsData = data.students as AppUser[];
+      } else if (db) {
+        const [slotsSnap, bookingsSnap, usersSnap] = await Promise.all([
+          getDocs(query(
+            collection(db, 'privateSlots'),
+            where('teacherId', '==', user.uid),
+          )),
+          getDocs(query(
+            collection(db, 'privateBookings'),
+            where('teacherId', '==', user.uid),
+          )),
+          getDocs(query(
+            collection(db, 'users'),
+            where('role', '==', 'student'),
+          )),
+        ]);
+        slotsData = slotsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateSlot));
+        bookingsData = bookingsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrivateBooking));
+        studentsData = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppUser));
+      } else {
+        const errBody = await apiRes.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || 'Failed to load');
+      }
+
+      setSlots(slotsData);
+      setBookings(bookingsData);
+      setStudents(studentsData);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {

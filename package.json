@@ -9,6 +9,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "deploy:firestore-rules": "firebase deploy --only firestore:rules",
     "setup-font-project": "node scripts/setup-font-project.js",
     "setup-fonts": "node scripts/setup-fonts.js",
     "setup-fonts:kawaii": "npm run setup-fonts kawaii",

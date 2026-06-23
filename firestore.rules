@@ -19,6 +19,7 @@ service cloud.firestore {
       return hasUserDoc() && userData().role == 'admin';
     }
 
+    // admin + teacher（管理画面・講師画面スタッフ）
     function isTeacher() {
       return hasUserDoc() && userData().role in ['admin', 'teacher'];
     }
@@ -35,54 +36,58 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 受講登録（作成・更新は管理者。生徒は自分のレコードのみ読取）
+    // 受講登録（作成・削除は管理者。生徒は自分のレコードの読取＋予約時の残数消費更新）
     match /enrollments/{enrollmentId} {
       allow read: if isTeacher() ||
         (isStudent() && resource.data.studentId == request.auth.uid);
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // 予約時、生徒アプリが自分の受講登録（残数）を直接消費するため update を許可。
+      allow update: if isAdmin() ||
+        (isStudent() && resource.data.studentId == request.auth.uid &&
+          request.resource.data.studentId == request.auth.uid);
     }
 
     // プライベート枠
     match /privateSlots/{slotId} {
       allow read: if isTeacher() || isStudent();
-      allow create: if isAdmin() || (isTeacher() && request.resource.data.teacherId == request.auth.uid);
-      allow update, delete: if isAdmin() ||
+      // 生徒アプリは予約時に枠の分割（前後の空き枠）を作成するため create を許可。
+      allow create: if isAdmin() ||
+        (isTeacher() && request.resource.data.teacherId == request.auth.uid) ||
+        isStudent();
+      // 生徒アプリは予約時に枠を booked に更新するため update を許可。
+      allow update: if isAdmin() ||
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        isStudent();
+      allow delete: if isAdmin() ||
         (isTeacher() && resource.data.teacherId == request.auth.uid);
     }
 
     // プライベート / セミプライベート予約
     match /privateBookings/{bookingId} {
       // 教師は全件読取可能。生徒は自分が代表者 or 参加者として含まれる予約のみ読取可能。
-      allow read: if isTeacher() ||
-        (isStudent() && (
-          resource.data.studentId == request.auth.uid ||
-          (resource.data.attendeeStudentIds is list &&
-            request.auth.uid in resource.data.attendeeStudentIds)
-        ));
+      // NOTE: `attendeeStudentIds array-contains uid` クエリを許可するため、
+      //       型ガード (is list) は付けず、条件を OR で分離する。
+      //       型ガードを付けると Firestore が array-contains クエリを静的検証できず拒否する。
+      allow read: if isTeacher()
+        || (isStudent() && resource.data.studentId == request.auth.uid)
+        || (isStudent() && request.auth.uid in resource.data.attendeeStudentIds);
       // 生徒からの作成は自分が代表者 or 参加者として含まれる場合のみ。
-      // ただし通常はサーバー側 (Admin SDK) で作成する想定。
-      allow create: if isAdmin() ||
-        (isStudent() && (
-          request.resource.data.studentId == request.auth.uid ||
-          (request.resource.data.attendeeStudentIds is list &&
-            request.auth.uid in request.resource.data.attendeeStudentIds)
-        ));
-      // 更新・削除も同条件。実運用では Admin SDK 経由を推奨。
-      allow update, delete: if isAdmin() || isTeacher() ||
-        (isStudent() && (
-          resource.data.studentId == request.auth.uid ||
-          (resource.data.attendeeStudentIds is list &&
-            request.auth.uid in resource.data.attendeeStudentIds)
-        ));
+      // 通常はサーバー側 (Admin SDK) で作成する想定。
+      allow create: if isAdmin()
+        || (isStudent() && request.resource.data.studentId == request.auth.uid)
+        || (isStudent() && request.auth.uid in request.resource.data.attendeeStudentIds);
+      allow update, delete: if isAdmin() || isTeacher()
+        || (isStudent() && resource.data.studentId == request.auth.uid)
+        || (isStudent() && request.auth.uid in resource.data.attendeeStudentIds);
     }
 
     // 生徒グループ（セミプライベートのペア事前登録）
     // 管理者のみが作成・編集・削除可能。
     // 講師は全件読取、生徒はメンバーである自分のグループのみ読取可能。
     match /studentGroups/{groupId} {
-      allow read: if isTeacher() ||
-        (isStudent() && resource.data.memberIds is list &&
-          request.auth.uid in resource.data.memberIds);
+      // `memberIds array-contains uid` クエリを許可するため型ガードは付けない。
+      allow read: if isTeacher()
+        || (isStudent() && request.auth.uid in resource.data.memberIds);
       allow create, update, delete: if isAdmin();
     }
 
